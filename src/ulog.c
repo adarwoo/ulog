@@ -9,7 +9,7 @@
 
 //
 // Porting guide macros;
-// 
+//
 // Define these macros or functions in ulog_porting.h to adapt to your platform
 // _ULOG_PORT_INIT                   : Initialize the UART and any other required resources
 // _ULOG_PORT_INIT_ATTRIBUTES        : Attributes for the init function (e.g. constructor)
@@ -68,7 +68,7 @@ uint8_t log_head = 0, log_tail = 0;
 // Circular buffer itself
 LogPacket logs_circular_buffer[QUEUE_DEPTH];
 
-// Scratch buffer for encoded output. Worse case 
+// Scratch buffer for encoded output. Worse case
 // The payload(COBS adds +2 overhead worse case)
 static uint8_t tx_encoded[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2];
 
@@ -86,7 +86,7 @@ static uint8_t buffer_overrun = 0;
  * Reserve a log packet in the circular buffer
  * @return Pointer to the reserved packet, or nullptr if the buffer is full
  */
-LogPacket *reserve_log_packet() {
+static LogPacket *reserve_log_packet() {
     LogPacket *retval = NULL;
 
     // As required - disable interrupt - but save since this could be used from within an interrupt
@@ -127,7 +127,7 @@ LogPacket *reserve_log_packet() {
  * @param length Length of input data
  * @return Length of encoded data
  */
-uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
+static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
     uint8_t read_index = 0;
     uint8_t write_index = 1;
     uint8_t code_index = 0;
@@ -159,8 +159,9 @@ uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
  * Invoked at every insertion and once a transmit is complete
  * Checks for pending data
  * If found, encode and initiates the transmission on the UART
+ * This function should be called when the system is idle.
  */
-void _ulog_on_transmit() {
+void _ulog_transmit() {
     // Avoid race condition since an interrupt could be logging
     _ULOG_PORT_ENTER_CRITICAL_SECTION();
 
@@ -238,7 +239,7 @@ void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
 
 void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3) {
    LogPacket* dst = reserve_log_packet();
-   
+
    if (dst) {
       dst->id = id;
       dst->payload_len = 1+4;
