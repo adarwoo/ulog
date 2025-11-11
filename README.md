@@ -10,7 +10,7 @@ ulog is a minimal, portable logging library designed for microcontrollers, bare�
 - Zero or minimal dynamic allocation; suitable for static + stack use
 - Pluggable backends (UART, ring buffer, memory buffer, custom callback)
 - Optional timestamping and source metadata (file/line) when enabled
-- Simple printf‑style formatting or preformatted binary messages
+- Open content formatting, from none, to full fledged Python expressions
 - Configurable thread/interrupt safety primitives or lock‑free operation
 - Format using powerfull format specifier
 - Compatible C11 and C++17
@@ -19,16 +19,17 @@ ULOG provides **real-time safe logging** with:
 
 | Feature | Specification |
 |---------|---------------|
-| ✅ **Ultra-fast execution** | 6.2µs per call |
-| ✅ **Tiny footprint** | 760 bytes flash, 113 bytes RAM |
+| ✅ **Ultra-fast execution** | 6.2µs per call @20MHz |
 | ✅ **Predictable latency** | Fixed 124-cycle execution path |
+| ✅ **Tiny footprint** | 760 bytes flash, 113 bytes RAM |
 | ✅ **High throughput** | 161k calls/second capacity |
-| ✅ **printf() compatibility** | Same interface, 65-121× faster |
+| ✅ **Printf alternative** | Similar interface, 65-121× faster |
 
 ### Design goals
 - Predictable, bounded latency for realtime systems
 - Easy integration into bootloader, kernel, or application code
-- Configurable at compile time via macros for maximum optimization
+- Works in interrupts
+- Compile time configuration
 - Single-header or tiny C module for straightforward inclusion
 - Extremly Low bandwidth required for the communication channel
    - >5000 logs/sec on a UART at 115200
