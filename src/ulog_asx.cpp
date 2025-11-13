@@ -6,9 +6,9 @@
 #include <interrupt.h>
 
 #include <string_view>
+#include <ulog.h>
 
 #include <asx/uart.hpp>
-#include <asx/ulog.hpp>
 #include <asx/reactor.hpp>
 
 // Allow selecting the UART to use for ULOG
@@ -40,7 +40,7 @@ namespace {
     * The logging can start before this is called, but no data will be sent
     */
    __attribute__((constructor()))
-   void init() {
+   void _ulog_asx_init() {
       uart::init();
       uart::disable_rx();
       uart::get().CTRLA = 0; // No interrupt at this stage
@@ -60,4 +60,7 @@ extern "C" void _ulog_asx_send_data(const uint8_t *data, size_t len) {
    uart::send(std::span<const uint8_t>(data, len));
 }
 
+extern "C" bool _ulog_asx_tx_ready() {
+   return uart::tx_ready();
+}
 

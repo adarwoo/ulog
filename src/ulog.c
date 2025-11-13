@@ -23,7 +23,7 @@
 // Apply configuration defaults
 //
 #ifndef ULOG_QUEUE_SIZE
-#  define ULOG_QUEUE_SIZE 16
+#  define ULOG_QUEUE_SIZE 64
 #endif
 
 // COBS framing char
@@ -115,7 +115,7 @@ static LogPacket *reserve_log_packet() {
     // This function must be callable from an interrupt context
     _ULOG_PORT_NOTIFY();
 
-    // Restore SREG
+    // Restore the context
     _ULOG_PORT_EXIT_CRITICAL_SECTION();
 
     return retval;
@@ -155,38 +155,43 @@ static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
 }
 
 /**
- * Initiate transmission reactor handler
+ * Initiate a transmission reactor handler
  * Invoked at every insertion and once a transmit is complete
  * Checks for pending data
  * If found, encode and initiates the transmission on the UART
  * This function should be called when the system is idle.
  */
 void _ulog_transmit() {
-    // Avoid race condition since an interrupt could be logging
-    _ULOG_PORT_ENTER_CRITICAL_SECTION();
+   // Avoid race condition since an interrupt could be logging
+   _ULOG_PORT_ENTER_CRITICAL_SECTION();
 
-    if (log_tail != log_head) {
-        // Data to send
-        LogPacket pkt = logs_circular_buffer[log_tail];
-        log_tail = (log_tail + 1) % QUEUE_DEPTH;
+   // Check the UART is ready and we have data to send
+   // No race expected: The flag could clear after we check it, but in that
+   // case, given the critical section here, the UART call this function again when ready
+   if ( _ULOG_UART_TX_READY() ) {
+      if (log_tail != log_head) {
+         // Data to send
+         LogPacket pkt = logs_circular_buffer[log_tail];
+         log_tail = (log_tail + 1) % QUEUE_DEPTH;
 
-        uint8_t encoded_len = cobs_encode(pkt.payload, pkt.payload_len);
+         uint8_t encoded_len = cobs_encode(pkt.payload, pkt.payload_len);
 
-        _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
-    } else if (buffer_overrun > 0) {
-        static uint8_t overrun_payload[2] = { 0xFF, 0 };
-        overrun_payload[1] = buffer_overrun;
-        uint8_t encoded_len = cobs_encode(overrun_payload, 2);
+         _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
+      } else if (buffer_overrun > 0) {
+         static uint8_t overrun_payload[2] = { 0xFF, 0 };
+         overrun_payload[1] = buffer_overrun;
+         uint8_t encoded_len = cobs_encode(overrun_payload, 2);
 
-        // Send an overrun notification packet
-        _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
+         // Send an overrun notification packet
+         _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
 
-        // Clear the overrun flag
-        buffer_overrun = 0;
-    }
+         // Clear the overrun flag
+         buffer_overrun = 0;
+      }
+   }
 
-    // Restore SREG
-    _ULOG_PORT_EXIT_CRITICAL_SECTION();
+   // Restore SREG
+   _ULOG_PORT_EXIT_CRITICAL_SECTION();
 }
 
 
@@ -247,5 +252,12 @@ void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8
       dst->data[1] = v1;
       dst->data[2] = v2;
       dst->data[3] = v3;
+   }
+}
+
+void ulog_flush(void) {
+   // Keep transmitting until the buffer is empty
+   while (log_tail != log_head) {
+      _ulog_transmit();
    }
 }

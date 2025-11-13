@@ -58,6 +58,11 @@ void ulog_detail_enqueue_1(uint8_t id, uint8_t v0);
 void ulog_detail_enqueue_2(uint8_t id, uint8_t v0, uint8_t v1);
 void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2);
 void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3);
+void ulog_flush(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 // ============================================================================
@@ -76,17 +81,17 @@ void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8
 // ============================================================================
 // C type codes
 // ============================================================================
-#define ULOG_TRAIT_ID_NONE  0
-#define ULOG_TRAIT_ID_U8    0x10
-#define ULOG_TRAIT_ID_S8    0x11
-#define ULOG_TRAIT_ID_BOOL  0x12
-#define ULOG_TRAIT_ID_U16   0x20
-#define ULOG_TRAIT_ID_S16   0x21
-#define ULOG_TRAIT_ID_PTR   0x22
-#define ULOG_TRAIT_ID_U32   0x40
-#define ULOG_TRAIT_ID_S32   0x41
-#define ULOG_TRAIT_ID_FLOAT 0x42
-#define ULOG_TRAIT_ID_STR4  0x43
+#define ULOG_TRAIT_ID_NONE  0x00L
+#define ULOG_TRAIT_ID_U8    0x10L
+#define ULOG_TRAIT_ID_S8    0x11L
+#define ULOG_TRAIT_ID_BOOL  0x12L
+#define ULOG_TRAIT_ID_U16   0x20L
+#define ULOG_TRAIT_ID_S16   0x21L
+#define ULOG_TRAIT_ID_PTR   0x22L
+#define ULOG_TRAIT_ID_U32   0x40L
+#define ULOG_TRAIT_ID_S32   0x41L
+#define ULOG_TRAIT_ID_FLOAT 0x42L
+#define ULOG_TRAIT_ID_STR4  0x43L
 
 // ============================================================================
 // Helper to generate .logs section and get ID
@@ -170,17 +175,17 @@ static inline void _ulog_dispatch_2_u8_u8(uint8_t id, uint8_t a, uint8_t b) {
 }
 
 static inline void _ulog_dispatch_2_u8_u16(uint8_t id, uint8_t a, uint16_t b) {
-    ulog_detail_enqueue_3(id, a, (uint8_t)(b), (uint8_t)(b >> 8));
+    ulog_detail_enqueue_3(id, a, (uint8_t)(b&0xFF), (uint8_t)(b >> 8));
 }
 
 static inline void _ulog_dispatch_2_u16_u8(uint8_t id, uint16_t a, uint8_t b) {
-    ulog_detail_enqueue_3(id, (uint8_t)(a), (uint8_t)(a >> 8), b);
+    ulog_detail_enqueue_3(id, (uint8_t)(a&0xFF), (uint8_t)(a >> 8), b);
 }
 
 static inline void _ulog_dispatch_2_u16_u16(uint8_t id, uint16_t a, uint16_t b) {
     ulog_detail_enqueue_4(id,
-        (uint8_t)(a), (uint8_t)(a >> 8),
-        (uint8_t)(b), (uint8_t)(b >> 8));
+        (uint8_t)(a&0xFF), (uint8_t)(a >> 8),
+        (uint8_t)(b&0xFF), (uint8_t)(b >> 8));
 }
 
 static inline void _ulog_dispatch_3_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b, uint8_t c) {
@@ -188,11 +193,11 @@ static inline void _ulog_dispatch_3_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b, u
 }
 
 static inline void _ulog_dispatch_3_u8_u16(uint8_t id, uint8_t a, uint16_t b) {
-    ulog_detail_enqueue_3(id, a, (uint8_t)(b), (uint8_t)(b >> 8));
+    ulog_detail_enqueue_3(id, a, (uint8_t)(b&0xFF), (uint8_t)(b >> 8));
 }
 
 static inline void _ulog_dispatch_3_u16_u8(uint8_t id, uint16_t a, uint8_t b) {
-    ulog_detail_enqueue_3(id, (uint8_t)(a), (uint8_t)(a >> 8), b);
+    ulog_detail_enqueue_3(id, (uint8_t)(a&0xFF), (uint8_t)(a >> 8), b);
 }
 
 static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
@@ -325,6 +330,159 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 #define ULOG(level, fmt, ...) \
     _ULOG_DISPATCH(_ULOG_GET_ARG_COUNT(__VA_ARGS__))(level, fmt, ##__VA_ARGS__)
 
+#else
+#include <tuple>
+#include <cstring>
+#include <type_traits>
+#include <utility>
+
+namespace asx {
+   namespace ulog {
+      namespace detail {
+         /** Value to pack for the argument trait */
+         enum class ArgTrait : uint8_t {
+            none    = ULOG_TRAIT_ID_NONE,
+            u8      = ULOG_TRAIT_ID_U8,
+            s8      = ULOG_TRAIT_ID_S8,
+            b8      = ULOG_TRAIT_ID_BOOL,
+            u16     = ULOG_TRAIT_ID_U16,
+            s16     = ULOG_TRAIT_ID_S16,
+            ptr16   = ULOG_TRAIT_ID_PTR,
+            u32     = ULOG_TRAIT_ID_U32,
+            s32     = ULOG_TRAIT_ID_S32,
+            float32 = ULOG_TRAIT_ID_FLOAT,
+            str4    = ULOG_TRAIT_ID_STR4
+         };
+
+         template <typename T>
+         constexpr ArgTrait arg_trait() {
+            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+
+            if constexpr (std::is_same_v<U, bool>)
+               return ArgTrait::b8;
+            else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
+               return ArgTrait::str4;
+            else if constexpr (std::is_floating_point_v<U>)
+               return ArgTrait::float32;
+            else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
+               return ArgTrait::ptr16;
+            else if constexpr (std::is_integral_v<U>) {
+               if constexpr (std::is_signed_v<U>) {
+                  if constexpr (sizeof(U) == 1) return ArgTrait::s8;
+                  if constexpr (sizeof(U) == 2) return ArgTrait::s16;
+                  if constexpr (sizeof(U) == 4) return ArgTrait::s32;
+               } else {
+                  if constexpr (sizeof(U) == 1) return ArgTrait::u8;
+                  if constexpr (sizeof(U) == 2) return ArgTrait::u16;
+                  if constexpr (sizeof(U) == 4) return ArgTrait::u32;
+               }
+            }
+
+            return ArgTrait::none;
+         }
+
+         template<typename... Ts>
+         constexpr uint32_t encode_traits() {
+            uint32_t result = 0;
+            uint8_t i = 0;
+            ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
+            return result;
+         }
+
+         template<typename... Ts>
+         constexpr size_t packed_sizeof() {
+            return (sizeof(Ts) + ... + 0);
+         }
+
+         template <typename T>
+         constexpr auto split_to_u8_tuple(T value) {
+            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+
+            if constexpr (std::is_integral_v<U>) {
+               if constexpr (sizeof(T) == 1) {
+                  return std::make_tuple(static_cast<uint8_t>(value));
+               } else if constexpr (sizeof(T) == 2) {
+                  return std::make_tuple(
+                        static_cast<uint8_t>(value & 0xFF),
+                        static_cast<uint8_t>((value >> 8) & 0xFF)
+                  );
+               } else if constexpr (sizeof(T) == 4) {
+                  return std::make_tuple(
+                        static_cast<uint8_t>(value & 0xFF),
+                        static_cast<uint8_t>((value >> 8) & 0xFF),
+                        static_cast<uint8_t>((value >> 16) & 0xFF),
+                        static_cast<uint8_t>((value >> 24) & 0xFF)
+                  );
+               } else {
+                  static_assert(0, "Unsupported integer size");
+               }
+            } else if constexpr (std::is_same_v<U, float>) {
+               static_assert(sizeof(float) == 4, "Unexpected float size");
+               union {
+                  float f;
+                  uint8_t bytes[4];
+               } conv = { value };
+
+               return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
+            } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
+               // We could read beyond the string - but that's OK, the display will fix it for us
+               return std::make_tuple(
+                  static_cast<uint8_t>(value[0]),
+                  static_cast<uint8_t>(value[1]),
+                  static_cast<uint8_t>(value[2]),
+                  static_cast<uint8_t>(value[3])
+               );
+            } else {
+               static_assert(0, "Unsupported type for packing");
+            }
+         }
+
+         template <typename... Args>
+         constexpr auto pack_bytes_to_tuple(Args&&... args) {
+            static_assert((... && (
+               std::is_integral_v<std::remove_reference_t<Args>> ||
+               std::is_same_v<std::remove_reference_t<Args>, float>
+            )), "Only integral or float arguments are supported");
+
+            return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
+         }
+      } // namespace detail
+   } // namespace ulog
+} // namespace asx
+
+#define ULOG(level, fmt, ...)                                                 \
+do {                                                                          \
+   constexpr uint8_t _level = static_cast<uint8_t>(level);                    \
+   [&]<typename... Args>(Args&&... args) {                                    \
+      constexpr uint32_t _typecode = ::asx::ulog::detail::encode_traits<Args...>();\
+      auto values = ::asx::ulog::detail::pack_bytes_to_tuple(args...);        \
+      constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value;    \
+      static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload");  \
+      _ULOG_GENERATE_LOG_ID(_level, fmt, _typecode);                          \
+      if constexpr (_nbytes == 0) {                                           \
+         ulog_detail_enqueue(id);                                             \
+      } else if constexpr (_nbytes == 1) {                                    \
+         auto&& b0 = std::get<0>(values);                                     \
+         ulog_detail_enqueue_1(id, b0);                                       \
+      } else if constexpr (_nbytes == 2) {                                    \
+         auto&& b0 = std::get<0>(values);                                     \
+         auto&& b1 = std::get<1>(values);                                     \
+         ulog_detail_enqueue_2(id, b0, b1);                                   \
+      } else if constexpr (_nbytes == 3) {                                    \
+         auto&& b0 = std::get<0>(values);                                     \
+         auto&& b1 = std::get<1>(values);                                     \
+         auto&& b2 = std::get<2>(values);                                     \
+         ulog_detail_enqueue_3(id, b0, b1, b2);                               \
+      } else if constexpr (_nbytes == 4) {                                    \
+         auto&& b0 = std::get<0>(values);                                     \
+         auto&& b1 = std::get<1>(values);                                     \
+         auto&& b2 = std::get<2>(values);                                     \
+         auto&& b3 = std::get<3>(values);                                     \
+         ulog_detail_enqueue_4(id, b0, b1, b2, b3);                           \
+      }                                                                       \
+   }(__VA_ARGS__);                                                            \
+} while(0)
+
 #endif // End of the C-only section
 
 // Include the project trace config (unless passed on the command line)
@@ -393,8 +551,4 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
   #define ULOG_DEBUG3(text, ...)      ULOG(ULOG_LEVEL_DEBUG3, text, ##__VA_ARGS__)
 #else
   #define ULOG_DEBUG3(text, ...)      do {} while (0)
-#endif
-
-#ifdef __cplusplus
-}
 #endif
