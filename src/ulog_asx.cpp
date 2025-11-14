@@ -20,6 +20,7 @@
 // C Linkage for the ULOG functions called from ulog.c
 extern "C" {
    void _ulog_transmit();
+   void _ulog_init();
    reactor_handle_t _ulog_asx_react_to_initiate_transmit = REACTOR_NULL_HANDLE;
 }
 
@@ -51,8 +52,8 @@ namespace {
       // When the uart is done sending a frame, we can send the next one
       uart::react_on_send_complete(_ulog_asx_react_to_initiate_transmit);
 
-      // Kickstart the transmission process
-      asx::reactor::Handle(_ulog_asx_react_to_initiate_transmit).notify();
+      // Complete the initialisation
+      _ulog_init();
    }
 } // End of anonymous namespace
 

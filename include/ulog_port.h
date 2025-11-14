@@ -9,6 +9,8 @@ extern "C" {
 
 // Common prototypes used by the ULOG framework
 void _ulog_on_transmit();
+void _ulog_init();
+
 
 #ifdef __AVR__
 #  include "sysclk.h"

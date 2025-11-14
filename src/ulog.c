@@ -26,8 +26,11 @@
 #  define ULOG_QUEUE_SIZE 64
 #endif
 
-// COBS framing char
-#define EOF 0xA6
+/** COBS framing char */
+#define COBS_EOF 0xA6
+
+/** Special ID for application start */
+#define ULOG_ID_START 0xFE
 
 // Circular buffer (stubbed here)
 #define MAX_PAYLOAD 4
@@ -70,7 +73,9 @@ LogPacket logs_circular_buffer[QUEUE_DEPTH];
 
 // Scratch buffer for encoded output. Worse case
 // The payload(COBS adds +2 overhead worse case)
-static uint8_t tx_encoded[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2];
+// Pre-fill with the encoded application start frame
+static uint8_t tx_encoded[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2] =
+   {0x02, ULOG_ID_START, COBS_EOF};
 
 // Flag to indicate a buffer overrun masked into the trait of the log
 // This is a simple way to indicate that some logs were lost
@@ -136,7 +141,7 @@ static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
     while (read_index < length) {
         uint8_t input_byte = input[read_index];
 
-        if (input_byte == EOF) {
+        if (input_byte == COBS_EOF) {
             tx_encoded[code_index] = code;
             code_index = write_index++;
             code = 1;
@@ -149,7 +154,7 @@ static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
     }
 
     tx_encoded[code_index] = code;
-    tx_encoded[write_index++] = EOF; // end frame
+    tx_encoded[write_index++] = COBS_EOF; // end frame
 
     return write_index;
 }
@@ -192,6 +197,13 @@ void _ulog_transmit() {
 
    // Restore SREG
    _ULOG_PORT_EXIT_CRITICAL_SECTION();
+}
+
+/**
+ * Internal init function to be called by the porting layer
+ */
+void _ulog_init() {
+   _ULOG_PORT_SEND_DATA(tx_encoded, 3); // Send the application start frame
 }
 
 
