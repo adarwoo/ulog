@@ -47,7 +47,7 @@ ULOG provides **real-time safe logging** with:
 
 int main(void) {
    ULOG_INFO("System initialized");
-   ULOG_DEBUG("Temperature: {}", temp_sensor);
+   ULOG_DEBUG("Temperature: ['blue' if t < 10 else 'red' if t > 50 else 'green'}]{:.1f}[/{'blue' if t < 10 else 'red' if t > 50 else 'green'}]", temp_sensor);
    ULOG_WARN("Position: {},{}", x_pos, y_pos);
    while (1) { /* ... */ }
 }
