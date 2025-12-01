@@ -2,7 +2,9 @@ ULog the µ logger for realtime, baremetal or resource constrained operating env
 
 ## Description
 
-ulog is a minimal, portable logging library designed for microcontrollers, bare‑metal systems, and other resource‑constrained environments. It focuses on a tiny footprint, predictable runtime, and flexible transport backends so it can be used in realtime or no‑OS projects.
+ulog is a minimal, portable logging library designed for microcontrollers, bare‑metal systems, and other resource‑constrained environments.
+It focuses on a tiny footprint, predictable runtime, and flexible transport backends so it can be used in realtime or no‑OS projects.
+It does not require tooling or specific build steps and kills any other system.
 
 ### Key features
 - Extremely small code and data size (configurable at compile time)
@@ -21,9 +23,11 @@ ULOG provides **real-time safe logging** with:
 |---------|---------------|
 | ✅ **Ultra-fast execution** | 6.2µs per call @20MHz |
 | ✅ **Predictable latency** | Fixed 124-cycle execution path |
-| ✅ **Tiny footprint** | 760 bytes flash, 113 bytes RAM |
+| ✅ **Tiny footprint** | From 6 bytes per log! |
+| ✅ **Tiny library** | 760 bytes flash, 113 bytes RAM |
 | ✅ **High throughput** | 161k calls/second capacity |
 | ✅ **Printf alternative** | Similar interface, 65-121× faster |
+| ✅ **Enhanced formatting** | Automatic and enhanced Python like formatting |
 
 ### Design goals
 - Predictable, bounded latency for realtime systems
@@ -32,7 +36,7 @@ ULOG provides **real-time safe logging** with:
 - Compile time configuration
 - Single-header or tiny C module for straightforward inclusion
 - Extremly Low bandwidth required for the communication channel
-   - >5000 logs/sec on a UART at 115200
+   - >1500 logs/sec on a UART at 115200
    - Suitable for RPMsg channel
 
 ## Quick Usage Example
@@ -211,3 +215,8 @@ uint8_t tx_encoded[MAX_PAYLOAD + sizeof(uint8_t) + 2]
 - **Efficient**: Only processes when system is idle
 - **Overrun Protection**: Tracks and reports buffer overflow conditions
 - **Minimal Footprint**: Configurable buffer sizes, no dynamic allocation
+
+## How to use
+
+Include the library into your project.
+
