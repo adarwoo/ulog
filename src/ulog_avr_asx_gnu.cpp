@@ -6,7 +6,7 @@
 #include <interrupt.h>
 
 #include <string_view>
-#include <ulog.h>
+#include <ulog_port.h>
 
 #include <asx/uart.hpp>
 #include <asx/reactor.hpp>

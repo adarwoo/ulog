@@ -6,6 +6,7 @@ ulog is a minimal, portable logging library designed for microcontrollers, bareâ
 
 ### Key features
 - Extremely small code and data size (configurable at compile time)
+- Only requires a small linker script change. Build as normal - no external build tools required
 - Optional compileâ€‘time log level filtering to remove unused messages
 - Zero or minimal dynamic allocation; suitable for static + stack use
 - Pluggable backends (UART, ring buffer, memory buffer, custom callback)

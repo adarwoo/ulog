@@ -5,18 +5,7 @@
  * @author software@arreckx.com
  */
 #include "ulog.h"
-#include "ulog_port.h"
-
-//
-// Porting guide macros;
-//
-// Define these macros or functions in ulog_porting.h to adapt to your platform
-// _ULOG_PORT_INIT                   : Initialize the UART and any other required resources
-// _ULOG_PORT_INIT_ATTRIBUTES        : Attributes for the init function (e.g. constructor)
-// _ULOG_PORT_ENTER_CRITICAL_SECTION : Enter critical section (save SREG if needed
-// _ULOG_PORT_EXIT_CRITICAL_SECTION  : Exit critical section (restore SREG if needed)
-// _ULOG_PORT_RING_THE_BELL          : Optional - ring a bell to notify that data is available
-//
+#include _ULOG_PORT_IMPL_PATH
 
 
 //

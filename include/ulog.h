@@ -39,12 +39,15 @@
  * @note Only types up to 4 bytes total are supported per log. Format strings must be literals.
  * @note The `.logs` section can be parsed from the ELF to map runtime packets back to messages.
  * @note You are limited to 255 messages per application
- * @note This header is C-compatible. C++ users should prefer the type-safe templated version in ulog.hpp
- * @note This header requires C11 or later for _Generic support.
+ * @note This header is C and C++ compatible, each language use an optimized version - more type safe for C++
+ * @note This header requires C11 or later for _Generic support and C++17 or later for template features.
  *
  * @author software@arreckx.com
  */
 #include <stdint.h>
+
+#include "ulog_port_selection.h"
+#include _ULOG_PORT_HEADER_PATH
 
 #ifdef __cplusplus
 extern "C" {
@@ -113,7 +116,7 @@ void ulog_flush(void);
    * @return A unique 8-bit log ID.
    */
 #define _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
-   register uint8_t id asm("r24"); \
+   register uint8_t id asm(_ULOG_ID_REGISTER); \
    asm volatile( \
       ".pushsection .logs,\"\",@progbits\n\t" \
       ".balign 256\n\t" \
@@ -124,7 +127,7 @@ void ulog_flush(void);
       ".asciz \"" __FILE__ "\"\n\t" \
       ".asciz \"" fmt "\"\n\t" \
       ".popsection\n\t" \
-      "ldi %0, hi8(1b)\n\t" \
+      _ULOG_PORT_LDI \
       : "=r" (id) \
       : "i" (level), "i" (__LINE__), "i" (typecode) \
       : \
