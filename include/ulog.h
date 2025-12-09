@@ -364,125 +364,123 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 #  include <type_traits>
 #  include <utility>
 
-namespace asx {
-   namespace ulog {
-      namespace detail {
-         /** Value to pack for the argument trait */
-         enum class ArgTrait : uint8_t {
-            none    = ULOG_TRAIT_ID_NONE,
-            u8      = ULOG_TRAIT_ID_U8,
-            s8      = ULOG_TRAIT_ID_S8,
-            b8      = ULOG_TRAIT_ID_BOOL,
-            u16     = ULOG_TRAIT_ID_U16,
-            s16     = ULOG_TRAIT_ID_S16,
-            ptr16   = ULOG_TRAIT_ID_PTR,
-            u32     = ULOG_TRAIT_ID_U32,
-            s32     = ULOG_TRAIT_ID_S32,
-            float32 = ULOG_TRAIT_ID_FLOAT,
-            str4    = ULOG_TRAIT_ID_STR4
-         };
+namespace ulog {
+   namespace detail {
+      /** Value to pack for the argument trait */
+      enum class ArgTrait : uint8_t {
+         none    = ULOG_TRAIT_ID_NONE,
+         u8      = ULOG_TRAIT_ID_U8,
+         s8      = ULOG_TRAIT_ID_S8,
+         b8      = ULOG_TRAIT_ID_BOOL,
+         u16     = ULOG_TRAIT_ID_U16,
+         s16     = ULOG_TRAIT_ID_S16,
+         ptr16   = ULOG_TRAIT_ID_PTR,
+         u32     = ULOG_TRAIT_ID_U32,
+         s32     = ULOG_TRAIT_ID_S32,
+         float32 = ULOG_TRAIT_ID_FLOAT,
+         str4    = ULOG_TRAIT_ID_STR4
+      };
 
-         template <typename T>
-         constexpr ArgTrait arg_trait() {
-            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+      template <typename T>
+      constexpr ArgTrait arg_trait() {
+         using U = std::remove_cv_t<std::remove_reference_t<T>>;
 
-            if constexpr (std::is_same_v<U, bool>)
-               return ArgTrait::b8;
-            else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
-               return ArgTrait::str4;
-            else if constexpr (std::is_floating_point_v<U>)
-               return ArgTrait::float32;
-            else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
-               return ArgTrait::ptr16;
-            else if constexpr (std::is_integral_v<U>) {
-               if constexpr (std::is_signed_v<U>) {
-                  if constexpr (sizeof(U) == 1) return ArgTrait::s8;
-                  if constexpr (sizeof(U) == 2) return ArgTrait::s16;
-                  if constexpr (sizeof(U) == 4) return ArgTrait::s32;
-               } else {
-                  if constexpr (sizeof(U) == 1) return ArgTrait::u8;
-                  if constexpr (sizeof(U) == 2) return ArgTrait::u16;
-                  if constexpr (sizeof(U) == 4) return ArgTrait::u32;
-               }
+         if constexpr (std::is_same_v<U, bool>)
+            return ArgTrait::b8;
+         else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
+            return ArgTrait::str4;
+         else if constexpr (std::is_floating_point_v<U>)
+            return ArgTrait::float32;
+         else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
+            return ArgTrait::ptr16;
+         else if constexpr (std::is_integral_v<U>) {
+            if constexpr (std::is_signed_v<U>) {
+               if constexpr (sizeof(U) == 1) return ArgTrait::s8;
+               if constexpr (sizeof(U) == 2) return ArgTrait::s16;
+               if constexpr (sizeof(U) == 4) return ArgTrait::s32;
+            } else {
+               if constexpr (sizeof(U) == 1) return ArgTrait::u8;
+               if constexpr (sizeof(U) == 2) return ArgTrait::u16;
+               if constexpr (sizeof(U) == 4) return ArgTrait::u32;
             }
-
-            return ArgTrait::none;
          }
 
-         template<typename... Ts>
-         constexpr uint32_t encode_traits() {
-            uint32_t result = 0;
-            uint8_t i = 0;
-            ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
-            return result;
-         }
+         return ArgTrait::none;
+      }
 
-         template<typename... Ts>
-         constexpr size_t packed_sizeof() {
-            return (sizeof(Ts) + ... + 0);
-         }
+      template<typename... Ts>
+      constexpr uint32_t encode_traits() {
+         uint32_t result = 0;
+         uint8_t i = 0;
+         ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
+         return result;
+      }
 
-         template <typename T>
-         constexpr auto split_to_u8_tuple(T value) {
-            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+      template<typename... Ts>
+      constexpr size_t packed_sizeof() {
+         return (sizeof(Ts) + ... + 0);
+      }
 
-            if constexpr (std::is_integral_v<U>) {
-               if constexpr (sizeof(T) == 1) {
-                  return std::make_tuple(static_cast<uint8_t>(value));
-               } else if constexpr (sizeof(T) == 2) {
-                  return std::make_tuple(
-                        static_cast<uint8_t>(value & 0xFF),
-                        static_cast<uint8_t>((value >> 8) & 0xFF)
-                  );
-               } else if constexpr (sizeof(T) == 4) {
-                  return std::make_tuple(
-                        static_cast<uint8_t>(value & 0xFF),
-                        static_cast<uint8_t>((value >> 8) & 0xFF),
-                        static_cast<uint8_t>((value >> 16) & 0xFF),
-                        static_cast<uint8_t>((value >> 24) & 0xFF)
-                  );
-               } else {
-                  //static_assert(0, "Unsupported integer size");
-               }
-            } else if constexpr (std::is_same_v<U, float>) {
-               static_assert(sizeof(float) == 4, "Unexpected float size");
-               union {
-                  float f;
-                  uint8_t bytes[4];
-               } conv = { value };
+      template <typename T>
+      constexpr auto split_to_u8_tuple(T value) {
+         using U = std::remove_cv_t<std::remove_reference_t<T>>;
 
-               return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
-            } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
-               // We could read beyond the string - but that's OK, the display will fix it for us
+         if constexpr (std::is_integral_v<U>) {
+            if constexpr (sizeof(T) == 1) {
+               return std::make_tuple(static_cast<uint8_t>(value));
+            } else if constexpr (sizeof(T) == 2) {
                return std::make_tuple(
-                  static_cast<uint8_t>(value[0]),
-                  static_cast<uint8_t>(value[1]),
-                  static_cast<uint8_t>(value[2]),
-                  static_cast<uint8_t>(value[3])
+                     static_cast<uint8_t>(value & 0xFF),
+                     static_cast<uint8_t>((value >> 8) & 0xFF)
+               );
+            } else if constexpr (sizeof(T) == 4) {
+               return std::make_tuple(
+                     static_cast<uint8_t>(value & 0xFF),
+                     static_cast<uint8_t>((value >> 8) & 0xFF),
+                     static_cast<uint8_t>((value >> 16) & 0xFF),
+                     static_cast<uint8_t>((value >> 24) & 0xFF)
                );
             } else {
-               //static_assert(0, "Unsupported type for packing");
+               //static_assert(0, "Unsupported integer size");
             }
-         }
+         } else if constexpr (std::is_same_v<U, float>) {
+            static_assert(sizeof(float) == 4, "Unexpected float size");
+            union {
+               float f;
+               uint8_t bytes[4];
+            } conv = { value };
 
-         template <typename... Args>
-         constexpr auto pack_bytes_to_tuple(Args&&... args) {
-            static_assert((... && (
-               std::is_integral_v<std::remove_reference_t<Args>> ||
-               std::is_same_v<std::remove_reference_t<Args>, float>
-            )), "Only integral or float arguments are supported");
-
-            return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
+            return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
+         } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
+            // We could read beyond the string - but that's OK, the display will fix it for us
+            return std::make_tuple(
+               static_cast<uint8_t>(value[0]),
+               static_cast<uint8_t>(value[1]),
+               static_cast<uint8_t>(value[2]),
+               static_cast<uint8_t>(value[3])
+            );
+         } else {
+            //static_assert(0, "Unsupported type for packing");
          }
-      } // namespace detail
-   } // namespace ulog
-} // namespace asx
+      }
+
+      template <typename... Args>
+      constexpr auto pack_bytes_to_tuple(Args&&... args) {
+         static_assert((... && (
+            std::is_integral_v<std::remove_reference_t<Args>> ||
+            std::is_same_v<std::remove_reference_t<Args>, float>
+         )), "Only integral or float arguments are supported");
+
+         return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
+      }
+   } // namespace detail
+} // namespace ulog
 
 #define ULOG(level, fmt, ...)                                                 \
 do {                                                                          \
    [&]<typename... Args>(Args&&... args) {                                    \
-      [[maybe_unused]] constexpr uint32_t _typecode = ::asx::ulog::detail::encode_traits<Args...>();\
-      auto values = ::asx::ulog::detail::pack_bytes_to_tuple(args...);        \
+      constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
+      auto values = ::ulog::detail::pack_bytes_to_tuple(args...);             \
       constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value;    \
       static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload");  \
       _ULOG_EMIT_RECORD_WITH_ID(level, fmt, _typecode);                       \
