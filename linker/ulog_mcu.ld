@@ -19,15 +19,6 @@
  * host-side tools to parse. It's never programmed to the device.
  */
 
-<<<<<<< HEAD
-/* Define metadata-only memory region (not loaded to flash) */
-MEMORY
-{
-  logmeta (r) : ORIGIN = 0x00010000, LENGTH = 64K
-}
-
-=======
->>>>>>> f4fe48dbff0f89cc808b133de05df5e509d854b5
 SECTIONS
 {
   /* Place .logs at address 0 for simplest ID computation */
@@ -37,10 +28,5 @@ SECTIONS
   {
     __ulog_logs_start = .;
     KEEP(*(.logs))
-    __ulog_logs_end = .;
-<<<<<<< HEAD
-  } > logmeta
-=======
   }
->>>>>>> f4fe48dbff0f89cc808b133de05df5e509d854b5
 }
