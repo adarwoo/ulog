@@ -5,19 +5,6 @@
  * @author software@arreckx.com
  */
 #include "ulog.h"
-#include "ulog_port.h"
-
-//
-// Porting guide macros;
-//
-// Define these macros or functions in ulog_porting.h to adapt to your platform
-// _ULOG_PORT_INIT                   : Initialize the UART and any other required resources
-// _ULOG_PORT_INIT_ATTRIBUTES        : Attributes for the init function (e.g. constructor)
-// _ULOG_PORT_ENTER_CRITICAL_SECTION : Enter critical section (save SREG if needed
-// _ULOG_PORT_EXIT_CRITICAL_SECTION  : Exit critical section (restore SREG if needed)
-// _ULOG_PORT_RING_THE_BELL          : Optional - ring a bell to notify that data is available
-//
-
 
 //
 // Apply configuration defaults
@@ -34,9 +21,6 @@
 
 // Circular buffer (stubbed here)
 #define MAX_PAYLOAD 4
-
-// Circular buffer depth
-#define QUEUE_DEPTH ULOG_QUEUE_SIZE
 
 #ifndef ULOG_ID_TYPE
 #  define ULOG_ID_TYPE uint8_t
@@ -69,7 +53,7 @@ typedef struct {
 uint8_t log_head = 0, log_tail = 0;
 
 // Circular buffer itself
-LogPacket logs_circular_buffer[QUEUE_DEPTH];
+LogPacket logs_circular_buffer[ULOG_QUEUE_SIZE];
 
 // Scratch buffer for encoded output. Worse case
 // The payload(COBS adds +2 overhead worse case)
@@ -100,7 +84,7 @@ static LogPacket *reserve_log_packet() {
     // Don't accept new logs while we are in overrun state
     // Rationale: Allow the buffer to clean, process logs faster to recover properly
     if ( buffer_overrun == 0 ) {
-        uint8_t next = (log_head + 1) % QUEUE_DEPTH;
+        uint8_t next = (uint8_t)((log_head + 1) % ULOG_QUEUE_SIZE);
 
         if (next != log_tail) {
             retval = &logs_circular_buffer[log_head];
@@ -115,10 +99,6 @@ static LogPacket *reserve_log_packet() {
             ++buffer_overrun;
         }
     }
-
-    // Notify that data is available so a transmission can be initiated
-    // This function must be callable from an interrupt context
-    _ULOG_PORT_NOTIFY();
 
     // Restore the context
     _ULOG_PORT_EXIT_CRITICAL_SECTION();
@@ -177,7 +157,7 @@ void _ulog_transmit() {
       if (log_tail != log_head) {
          // Data to send
          LogPacket pkt = logs_circular_buffer[log_tail];
-         log_tail = (log_tail + 1) % QUEUE_DEPTH;
+         log_tail = (uint8_t)((log_tail + 1) % ULOG_QUEUE_SIZE);
 
          uint8_t encoded_len = cobs_encode(pkt.payload, pkt.payload_len);
 
@@ -228,6 +208,10 @@ void ulog_detail_enqueue_1(uint8_t id, uint8_t v0) {
       dst->id = id;
       dst->payload_len = 1+1;
       dst->data[0] = v0;
+
+      // Notify that data is available so a transmission can be initiated
+      // This function must be callable from an interrupt context
+      _ULOG_PORT_NOTIFY();
    }
 }
 
@@ -239,6 +223,10 @@ void ulog_detail_enqueue_2(uint8_t id, uint8_t v0, uint8_t v1) {
       dst->payload_len = 1+2;
       dst->data[0] = v0;
       dst->data[1] = v1;
+
+      // Notify that data is available so a transmission can be initiated
+      // This function must be callable from an interrupt context
+      _ULOG_PORT_NOTIFY();
    }
 }
 
@@ -251,6 +239,11 @@ void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
       dst->data[0] = v0;
       dst->data[1] = v1;
       dst->data[2] = v2;
+      
+      // Notify that data is available so a transmission can be initiated
+      // This function must be callable from an interrupt context
+      _ULOG_PORT_NOTIFY();
+
    }
 }
 
@@ -264,6 +257,11 @@ void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8
       dst->data[1] = v1;
       dst->data[2] = v2;
       dst->data[3] = v3;
+
+      // Notify that data is available so a transmission can be initiated
+      // This function must be callable from an interrupt context
+      _ULOG_PORT_NOTIFY();
+
    }
 }
 

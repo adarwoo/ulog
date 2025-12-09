@@ -39,16 +39,18 @@
  * @note Only types up to 4 bytes total are supported per log. Format strings must be literals.
  * @note The `.logs` section can be parsed from the ELF to map runtime packets back to messages.
  * @note You are limited to 255 messages per application
- * @note This header is C-compatible. C++ users should prefer the type-safe templated version in ulog.hpp
- * @note This header requires C11 or later for _Generic support.
+ * @note This header is C and C++ compatible, each language use an optimized version - more type safe for C++
+ * @note This header requires C11 or later for _Generic support and C++17 or later for template features.
  *
  * @author software@arreckx.com
  */
 #include <stdint.h>
+#include "ulog_port.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 
 // ============================================================================
 // Forwarding prototypes
@@ -63,7 +65,6 @@ void ulog_flush(void);
 #ifdef __cplusplus
 }
 #endif
-
 
 // ============================================================================
 // MACRO Compatible levels
@@ -94,41 +95,36 @@ void ulog_flush(void);
 #define ULOG_TRAIT_ID_STR4  0x43L
 
 // ============================================================================
-// Helper to generate .logs section and get ID
+// Helpers to generate .logs section and get ID
 // ============================================================================
 
 /**
-   * @brief Generate a unique log ID based on level, format string, line number, and typecode.
-   *
-   * This function combines the log level, a pointer to the format string,
-   * the line number, and a typecode representing the argument types into
-   * a unique 8-bit identifier. The identifier is used to reference the
-   * log message in the .logs section of the ELF binary.
-   * The function also emits the log metadata into a dedicated .logs section
-   *
-   * @param level The log level (e.g., debug, info, warn, error).
-   * @param fmt A pointer to the format string (must be a string literal).
-   * @param line The line number where the log call is made.
-   * @param typecode A 32-bit code representing the types of the arguments.
-   * @return A unique 8-bit log ID.
-   */
-#define _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
-   register uint8_t id asm("r24"); \
-   asm volatile( \
-      ".pushsection .logs,\"\",@progbits\n\t" \
-      ".balign 256\n\t" \
-      "1:\n\t" \
-      ".byte %1\n\t" \
-      ".long %2\n\t" \
-      ".long %3\n\t" \
-      ".asciz \"" __FILE__ "\"\n\t" \
-      ".asciz \"" fmt "\"\n\t" \
-      ".popsection\n\t" \
-      "ldi %0, hi8(1b)\n\t" \
-      : "=r" (id) \
-      : "i" (level), "i" (__LINE__), "i" (typecode) \
-      : \
-   );
+ * Emit a log record directly into the .logs section using inline assembly.
+ * 
+ * This generic implementation creates .logs section entries but DOES NOT
+ * provide a way to get the record address portably. Each platform MUST
+ * override this macro with architecture-specific address computation.
+ * 
+ * Platform implementations:
+ * - x86-64: Uses RIP-relative LEA (see ulog_linux_gnu.h)
+ * - AVR: Uses LPM/LDS with program memory addressing (see ulog_avr_asx_gnu.h)  
+ * - ARM: Uses PC-relative addressing
+ * 
+ * Layout (256 bytes total):
+ * - Byte 0: level (1 byte)
+ * - Bytes 1-4: line number (4 bytes)
+ * - Bytes 5-8: typecode (4 bytes)
+ * - Bytes 9+: file path (null-terminated, packed)
+ * - Next: format string (null-terminated, packed immediately after file)
+ * 
+ * IMPORTANT: 
+ * - Format strings containing % must escape them as %% (inline assembly)
+ * - .logs section has NO "a" flag (not allocatable) - it's metadata only
+ */
+#ifndef _ULOG_EMIT_RECORD
+#  error "Platform must define _ULOG_EMIT_RECORD with architecture-specific address computation"
+#endif
+
 
 // This section creates the macros for C usage
 // C++ users should use the templated version in ulog.hpp which is more type-safe
@@ -223,7 +219,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 // Helper macros that generate ID first, then call the dispatch function
 #define _ULOG_SELECT_0(level, fmt) \
    do { \
-      _ULOG_GENERATE_LOG_ID(level, fmt, 0) \
+      _ULOG_GENERATE_LOG_ID(N, level, fmt, 0) \
       _ulog_dispatch_0(id); \
    } while(0)
 
@@ -237,14 +233,13 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_0(level, fmt) \
    do { \
-      _ULOG_GENERATE_LOG_ID(level, fmt, 0) \
+      _ULOG_EMIT_RECORD(level, fmt, 0) \
       _ulog_dispatch_0(id); \
    } while(0)
 
 #define _ULOG_DISPATCH_1(level, fmt, a) \
    do { \
-      uint32_t typecode = _ULOG_TC(a); \
-      _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
+      _ULOG_EMIT_RECORD(level, fmt, _ULOG_TC(a)) \
       _Generic((a), \
          uint8_t:  _ulog_dispatch_1_u8(id, a), \
          int8_t:   _ulog_dispatch_1_u8(id, a), \
@@ -259,8 +254,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_2(level, fmt, a, b) \
    do { \
-      uint32_t typecode = (_ULOG_TC(b) << 8) | _ULOG_TC(a); \
-      _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _Generic((a), \
          uint8_t: _Generic((b), \
             uint8_t:  _ulog_dispatch_2_u8_u8( id, a, b), \
@@ -302,8 +296,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_3(level, fmt, a, b, c) \
    do { \
-      uint32_t typecode = (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a); \
-      _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _Generic((a), \
          uint8_t: _Generic((b), \
             uint8_t: _ulog_dispatch_3_u8_u8_u8(id, a, b, c), \
@@ -315,8 +308,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_4(level, fmt, a, b, c, d) \
    do { \
-      uint32_t typecode = (_ULOG_TC(d) << 24) | (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a); \
-      _ULOG_GENERATE_LOG_ID(level, fmt, typecode) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(d) << 24) | (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _ulog_dispatch_4_u8_u8_u8_u8(id, a, b, c, d); \
    } while(0)
 
@@ -328,137 +320,135 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 // Main ULOG macro (C version)
 #define ULOG(level, fmt, ...) \
-    _ULOG_DISPATCH(_ULOG_GET_ARG_COUNT(__VA_ARGS__))(level, fmt, ##__VA_ARGS__)
+   _ULOG_DISPATCH(_ULOG_GET_ARG_COUNT(__VA_ARGS__))(level, fmt, ##__VA_ARGS__)
 
 #else
-#include <tuple>
-#include <cstring>
-#include <type_traits>
-#include <utility>
+#  include <tuple>
+#  include <cstring>
+#  include <type_traits>
+#  include <utility>
 
-namespace asx {
-   namespace ulog {
-      namespace detail {
-         /** Value to pack for the argument trait */
-         enum class ArgTrait : uint8_t {
-            none    = ULOG_TRAIT_ID_NONE,
-            u8      = ULOG_TRAIT_ID_U8,
-            s8      = ULOG_TRAIT_ID_S8,
-            b8      = ULOG_TRAIT_ID_BOOL,
-            u16     = ULOG_TRAIT_ID_U16,
-            s16     = ULOG_TRAIT_ID_S16,
-            ptr16   = ULOG_TRAIT_ID_PTR,
-            u32     = ULOG_TRAIT_ID_U32,
-            s32     = ULOG_TRAIT_ID_S32,
-            float32 = ULOG_TRAIT_ID_FLOAT,
-            str4    = ULOG_TRAIT_ID_STR4
-         };
+namespace ulog {
+   namespace detail {
+      /** Value to pack for the argument trait */
+      enum class ArgTrait : uint8_t {
+         none    = ULOG_TRAIT_ID_NONE,
+         u8      = ULOG_TRAIT_ID_U8,
+         s8      = ULOG_TRAIT_ID_S8,
+         b8      = ULOG_TRAIT_ID_BOOL,
+         u16     = ULOG_TRAIT_ID_U16,
+         s16     = ULOG_TRAIT_ID_S16,
+         ptr16   = ULOG_TRAIT_ID_PTR,
+         u32     = ULOG_TRAIT_ID_U32,
+         s32     = ULOG_TRAIT_ID_S32,
+         float32 = ULOG_TRAIT_ID_FLOAT,
+         str4    = ULOG_TRAIT_ID_STR4
+      };
 
-         template <typename T>
-         constexpr ArgTrait arg_trait() {
-            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+      template <typename T>
+      constexpr ArgTrait arg_trait() {
+         using U = std::remove_cv_t<std::remove_reference_t<T>>;
 
-            if constexpr (std::is_same_v<U, bool>)
-               return ArgTrait::b8;
-            else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
-               return ArgTrait::str4;
-            else if constexpr (std::is_floating_point_v<U>)
-               return ArgTrait::float32;
-            else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
-               return ArgTrait::ptr16;
-            else if constexpr (std::is_integral_v<U>) {
-               if constexpr (std::is_signed_v<U>) {
-                  if constexpr (sizeof(U) == 1) return ArgTrait::s8;
-                  if constexpr (sizeof(U) == 2) return ArgTrait::s16;
-                  if constexpr (sizeof(U) == 4) return ArgTrait::s32;
-               } else {
-                  if constexpr (sizeof(U) == 1) return ArgTrait::u8;
-                  if constexpr (sizeof(U) == 2) return ArgTrait::u16;
-                  if constexpr (sizeof(U) == 4) return ArgTrait::u32;
-               }
+         if constexpr (std::is_same_v<U, bool>)
+            return ArgTrait::b8;
+         else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
+            return ArgTrait::str4;
+         else if constexpr (std::is_floating_point_v<U>)
+            return ArgTrait::float32;
+         else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
+            return ArgTrait::ptr16;
+         else if constexpr (std::is_integral_v<U>) {
+            if constexpr (std::is_signed_v<U>) {
+               if constexpr (sizeof(U) == 1) return ArgTrait::s8;
+               if constexpr (sizeof(U) == 2) return ArgTrait::s16;
+               if constexpr (sizeof(U) == 4) return ArgTrait::s32;
+            } else {
+               if constexpr (sizeof(U) == 1) return ArgTrait::u8;
+               if constexpr (sizeof(U) == 2) return ArgTrait::u16;
+               if constexpr (sizeof(U) == 4) return ArgTrait::u32;
             }
-
-            return ArgTrait::none;
          }
 
-         template<typename... Ts>
-         constexpr uint32_t encode_traits() {
-            uint32_t result = 0;
-            uint8_t i = 0;
-            ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
-            return result;
-         }
+         return ArgTrait::none;
+      }
 
-         template<typename... Ts>
-         constexpr size_t packed_sizeof() {
-            return (sizeof(Ts) + ... + 0);
-         }
+      template<typename... Ts>
+      constexpr uint32_t encode_traits() {
+         uint32_t result = 0;
+         uint8_t i = 0;
+         ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
+         return result;
+      }
 
-         template <typename T>
-         constexpr auto split_to_u8_tuple(T value) {
-            using U = std::remove_cv_t<std::remove_reference_t<T>>;
+      template<typename... Ts>
+      constexpr size_t packed_sizeof() {
+         return (sizeof(Ts) + ... + 0);
+      }
 
-            if constexpr (std::is_integral_v<U>) {
-               if constexpr (sizeof(T) == 1) {
-                  return std::make_tuple(static_cast<uint8_t>(value));
-               } else if constexpr (sizeof(T) == 2) {
-                  return std::make_tuple(
-                        static_cast<uint8_t>(value & 0xFF),
-                        static_cast<uint8_t>((value >> 8) & 0xFF)
-                  );
-               } else if constexpr (sizeof(T) == 4) {
-                  return std::make_tuple(
-                        static_cast<uint8_t>(value & 0xFF),
-                        static_cast<uint8_t>((value >> 8) & 0xFF),
-                        static_cast<uint8_t>((value >> 16) & 0xFF),
-                        static_cast<uint8_t>((value >> 24) & 0xFF)
-                  );
-               } else {
-                  static_assert(0, "Unsupported integer size");
-               }
-            } else if constexpr (std::is_same_v<U, float>) {
-               static_assert(sizeof(float) == 4, "Unexpected float size");
-               union {
-                  float f;
-                  uint8_t bytes[4];
-               } conv = { value };
+      template <typename T>
+      constexpr auto split_to_u8_tuple(T value) {
+         using U = std::remove_cv_t<std::remove_reference_t<T>>;
 
-               return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
-            } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
-               // We could read beyond the string - but that's OK, the display will fix it for us
+         if constexpr (std::is_integral_v<U>) {
+            if constexpr (sizeof(T) == 1) {
+               return std::make_tuple(static_cast<uint8_t>(value));
+            } else if constexpr (sizeof(T) == 2) {
                return std::make_tuple(
-                  static_cast<uint8_t>(value[0]),
-                  static_cast<uint8_t>(value[1]),
-                  static_cast<uint8_t>(value[2]),
-                  static_cast<uint8_t>(value[3])
+                     static_cast<uint8_t>(value & 0xFF),
+                     static_cast<uint8_t>((value >> 8) & 0xFF)
+               );
+            } else if constexpr (sizeof(T) == 4) {
+               return std::make_tuple(
+                     static_cast<uint8_t>(value & 0xFF),
+                     static_cast<uint8_t>((value >> 8) & 0xFF),
+                     static_cast<uint8_t>((value >> 16) & 0xFF),
+                     static_cast<uint8_t>((value >> 24) & 0xFF)
                );
             } else {
-               static_assert(0, "Unsupported type for packing");
+               static_assert(sizeof(T) == 0, "Unsupported integer size");
             }
-         }
+         } else if constexpr (std::is_same_v<U, float>) {
+            static_assert(sizeof(float) == 4, "Unexpected float size");
+            union {
+               float f;
+               uint8_t bytes[4];
+            } conv = { value };
 
-         template <typename... Args>
-         constexpr auto pack_bytes_to_tuple(Args&&... args) {
-            static_assert((... && (
-               std::is_integral_v<std::remove_reference_t<Args>> ||
-               std::is_same_v<std::remove_reference_t<Args>, float>
-            )), "Only integral or float arguments are supported");
-
-            return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
+            return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
+         } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
+            // We could read beyond the string - but that's OK, the display will fix it for us
+            return std::make_tuple(
+               static_cast<uint8_t>(value[0]),
+               static_cast<uint8_t>(value[1]),
+               static_cast<uint8_t>(value[2]),
+               static_cast<uint8_t>(value[3])
+            );
+         } else {
+            static_assert(sizeof(U) == 0, "Unsupported type for packing");
          }
-      } // namespace detail
-   } // namespace ulog
-} // namespace asx
+      }
+
+      template <typename... Args>
+      constexpr auto pack_bytes_to_tuple(Args&&... args) {
+         static_assert((... && (
+            std::is_integral_v<std::remove_reference_t<Args>> ||
+            std::is_same_v<std::remove_reference_t<Args>, float>
+         )), "Only integral or float arguments are supported");
+
+         return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
+      }
+   } // namespace detail
+} // namespace ulog
 
 #define ULOG(level, fmt, ...)                                                 \
 do {                                                                          \
-   constexpr uint8_t _level = static_cast<uint8_t>(level);                    \
    [&]<typename... Args>(Args&&... args) {                                    \
-      constexpr uint32_t _typecode = ::asx::ulog::detail::encode_traits<Args...>();\
-      auto values = ::asx::ulog::detail::pack_bytes_to_tuple(args...);        \
+      constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
+      (void)_typecode; /* suppress unused warning when inlined as constant */ \
+      auto values = ::ulog::detail::pack_bytes_to_tuple(args...);             \
       constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value;    \
       static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload");  \
-      _ULOG_GENERATE_LOG_ID(_level, fmt, _typecode);                          \
+      _ULOG_EMIT_RECORD(level, fmt, _typecode);                       \
       if constexpr (_nbytes == 0) {                                           \
          ulog_detail_enqueue(id);                                             \
       } else if constexpr (_nbytes == 1) {                                    \

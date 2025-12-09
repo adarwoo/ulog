@@ -39,3 +39,10 @@
 
 # debug information files
 *.dwo
+test/*.ii
+test/*.i
+test/*.s
+test/test_link
+src/*.ii
+src/*.i
+src/*.s
