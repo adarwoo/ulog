@@ -36,3 +36,14 @@ bool _ulog_avr_asx_tx_ready();
 #define _ULOG_UART_TX_READY() \
     _ulog_avr_asx_tx_ready()
 
+/**
+ * AVR-optimized ID computation (no subtraction!).
+ * AVR has fixed addresses, so we extract ID directly from address bits 8-15.
+ * This saves one SUB instruction - critical for AVR performance.
+ */
+#define ULOG_CUSTOM_ID_REL
+static inline uint8_t ulog_id_rel(const void *p) {
+   uintptr_t addr = (uintptr_t)p;
+   return (uint8_t)((addr >> 8) & 0xFF);
+}
+
