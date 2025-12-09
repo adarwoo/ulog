@@ -141,16 +141,32 @@ static inline uint8_t ulog_id_rel(const void *p) {
 /**
  * Emit a log record into the .logs section.
  * Strings are embedded directly in the struct via fixed-size arrays.
- * Section type is "a" (allocatable) to ensure consistency across C/C++.
+ * 
+ * Note: AVR-GCC may report section type conflicts when mixing C/C++ files.
+ * This is a false positive - all records use identical attributes.
+ * The pragma suppresses this spurious warning.
  */
 #ifndef _ULOG_EMIT_RECORD_N
-#  define _ULOG_EMIT_RECORD_N(ID, level, fmt, typecode)                     \
-   __attribute__((section(".logs,\"a\",@progbits#"), used, aligned(256)))  \
-   static const struct ulog_record                                         \
-   _ULOG_CAT(_ULOG_REC_, ID) = {                                           \
-         (uint8_t)(level), (uint32_t)(__LINE__), (uint32_t)(typecode),       \
-         __FILE__, fmt                                                       \
-   }
+#  if defined(__GNUC__) && !defined(__clang__)
+#    define _ULOG_EMIT_RECORD_N(ID, level, fmt, typecode)                     \
+     _Pragma("GCC diagnostic push")                                          \
+     _Pragma("GCC diagnostic ignored \"-Wattributes\"")                      \
+     __attribute__((section(".logs"), used, aligned(256)))                   \
+     static const struct ulog_record                                         \
+     _ULOG_CAT(_ULOG_REC_, ID) = {                                           \
+           (uint8_t)(level), (uint32_t)(__LINE__), (uint32_t)(typecode),       \
+           __FILE__, fmt                                                       \
+     };                                                                       \
+     _Pragma("GCC diagnostic pop")
+#  else
+#    define _ULOG_EMIT_RECORD_N(ID, level, fmt, typecode)                     \
+     __attribute__((section(".logs"), used, aligned(256)))                   \
+     static const struct ulog_record                                         \
+     _ULOG_CAT(_ULOG_REC_, ID) = {                                           \
+           (uint8_t)(level), (uint32_t)(__LINE__), (uint32_t)(typecode),       \
+           __FILE__, fmt                                                       \
+     }
+#  endif
 #endif
 
 // Given a unique (for the current file) ID, emit a content and set the id variable
