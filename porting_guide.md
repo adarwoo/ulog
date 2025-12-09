@@ -91,7 +91,7 @@ For platforms with **fixed addresses** (no PIE/ASLR), you can override `ulog_id_
  * This version omits the subtraction, saving one instruction.
  * Only use this if your platform doesn't use position-independent code.
  */
-#define ULOG_CUSTOM_ID_REL
+#define _ULOG_ID_REL_DEFINED
 static inline uint8_t ulog_id_rel(const void *p) {
    uintptr_t addr = (uintptr_t)p;
    return (uint8_t)((addr >> 8) & 0xFF);
@@ -118,9 +118,25 @@ Edit `ulog_port.h` to add automatic detection of your platform:
 
 ### 5. Create Linker Script
 
-The linker must create a `.logs` section to store log metadata.
+The linker must create a `.logs` section to store log metadata. Pre-configured scripts are available in the `linker/` directory.
 
-#### Example Linker Script Fragment:
+#### Option A: Use Pre-configured Scripts
+
+**For PIE/ASLR systems (Linux, macOS, etc.):**
+```bash
+# Add to your build flags
+LDFLAGS += -Wl,-T,linker/ulog_pie.ld
+```
+
+**For bare-metal microcontrollers (AVR, ARM, RISC-V, etc.):**
+```bash
+# Add to your build flags
+LDFLAGS += -Wl,-T,linker/ulog_mcu.ld
+```
+
+The `ulog_mcu.ld` script defines a `LOGMETA` memory region at `0x00810000`. Adjust the `ORIGIN` address if needed for your target.
+
+#### Option B: Manual Linker Script Integration
 
 For **AVR** or embedded platforms with fixed memory layout:
 
@@ -129,7 +145,7 @@ MEMORY
 {
   text   (rx)   : ORIGIN = 0x0000, LENGTH = 0x10000
   data   (rw!x) : ORIGIN = 0x800000, LENGTH = 0x2000
-  logmeta (r)   : ORIGIN = 0x10000, LENGTH = 0x10000  /* 64KB for logs */
+  LOGMETA (r)   : ORIGIN = 0x00810000, LENGTH = 64K  /* Metadata only, not loaded */
 }
 
 SECTIONS
@@ -139,7 +155,7 @@ SECTIONS
     __ulog_logs_start = .;
     KEEP(*(.logs))
     __ulog_logs_end = .;
-  } > logmeta
+  } > LOGMETA
 }
 ```
 
@@ -152,7 +168,6 @@ SECTIONS
   {
     __ulog_logs_start = .;
     KEEP(*(.logs))
-    KEEP(*(.logs.*))
     __ulog_logs_end = .;
   }
 }
@@ -163,7 +178,8 @@ INSERT AFTER .rodata
 * Align to 256 bytes (required for ID computation)
 * Use `KEEP()` to prevent linker garbage collection
 * Define `__ulog_logs_start` and `__ulog_logs_end` symbols
-* For `-fdata-sections`, also include `KEEP(*(.logs.*))`
+* For MCUs: `.logs` goes to `LOGMETA` (metadata only, not burned to flash)
+* For PIE systems: `.logs` is placed after `.rodata` in the executable
 
 ### 6. Implement Platform-Specific Functions
 
@@ -201,51 +217,227 @@ This ensures that function-local static log records are placed in the `.logs` se
 
 ## Platform Examples
 
-### AVR Example
+### AVR Example (Fixed Addresses)
 
-See `include/ulog_avr_asx_gnu.h` and `src/ulog_avr_asx_gnu.cpp`
+See `include/ulog_avr_none_gnu.h` and `src/ulog_avr_none_gnu.cpp`
 
 **Key features:**
-- Uses optimized `ulog_id_rel` (no subtraction)
-- Interrupt-based critical sections
-- Integration with reactor framework
+- Uses optimized `ulog_id_rel` (no subtraction - saves 1 instruction!)
+- Direct address bit extraction for log IDs
+- Polling UART at 115200 baud
+- No OS - minimal bare metal implementation
 
-### Linux Example
+**Linker setup:**
+```bash
+LDFLAGS += -Wl,-T,linker/ulog_mcu.ld
+```
+
+### Linux Example (PIE/ASLR)
 
 See `include/ulog_linux_gnu.h` and `src/ulog_linux.cpp`
 
 **Key features:**
-- Uses default `ulog_id_rel` (with subtraction for PIE)
-- pthread mutex for thread safety
+- Uses default `ulog_id_rel` (with subtraction for PIE compatibility)
+- pthread mutex/condition for thread safety
 - Background transmitter thread
+- Constructor/destructor for automatic init/cleanup
+
+**Linker setup:**
+```bash
+LDFLAGS += -Wl,-T,linker/ulog_pie.ld
+```
+
+### FreeRTOS Example (RTOS)
+
+See `include/ulog_freertos_gnu.h` and `src/ulog_freertos.cpp`
+
+**Key features:**
+- Event groups for notification (instead of condition variables)
+- Transmits logs during idle task execution
+- Critical sections using `taskENTER_CRITICAL/taskEXIT_CRITICAL`
+- Requires `configUSE_IDLE_HOOK` enabled in FreeRTOSConfig.h
+
+**Linker setup:**
+```bash
+LDFLAGS += -Wl,-T,linker/ulog_mcu.ld  # Or ulog_pie.ld for systems with MMU
+```
 
 ## Testing Your Port
 
-1. Compile with your platform toolchain
-2. Verify `.logs` section exists: `objdump -h yourapp.elf | grep .logs`
-3. Check symbol addresses: `nm yourapp.elf | grep __ulog`
-4. Test with simple log: `ULOG_INFO("Hello from %s!", "yourplatform");`
-5. Verify output on your transport (UART, USB, etc.)
+1. **Compile with your platform toolchain**
+   ```bash
+   # Example for AVR
+   avr-gcc -mmcu=atmega328p -fdata-sections -Wl,-T,linker/ulog_mcu.ld ...
+   
+   # Example for Linux
+   gcc -fdata-sections -Wl,-T,linker/ulog_pie.ld ...
+   ```
+
+2. **Verify `.logs` section exists**
+   ```bash
+   objdump -h yourapp.elf | grep .logs
+   # Should show: .logs with 256-byte alignment
+   ```
+
+3. **Check symbol addresses**
+   ```bash
+   nm yourapp.elf | grep __ulog
+   # Should show: __ulog_logs_start and __ulog_logs_end
+   ```
+
+4. **Inspect log records**
+   ```bash
+   objdump -s -j .logs yourapp.elf
+   # Should show 256-byte aligned records with visible strings
+   ```
+
+5. **Test with simple log**
+   ```c
+   ULOG_INFO("Hello from %s!", "yourplatform");
+   ULOG_DEBUG("Test value: %d", 42);
+   ```
+
+6. **Verify output on your transport**
+   - UART: Check serial monitor
+   - USB: Check USB terminal
+   - Network: Check network logs
+
+7. **Check code generation efficiency** (optional)
+   ```bash
+   # Disassemble to verify minimal instructions
+   objdump -d -M intel yourapp.elf | less
+   # Look for ULOG calls - should be very few instructions
+   ```
 
 ## Troubleshooting
 
 ### Log IDs are not continuous
-- Ensure `-fdata-sections` is enabled
-- Check linker script includes `KEEP(*(.logs))` and `KEEP(*(.logs.*))`
-- Verify alignment is 256 bytes
+- **Cause**: Records not properly aligned or scattered across memory
+- **Fix**: 
+  - Ensure `-fdata-sections` is enabled
+  - Check linker script includes `KEEP(*(.logs))`
+  - Verify alignment is exactly 256 bytes
+  - For PIE systems, use `ulog_pie.ld`
 
 ### Logs not appearing
-- Check `_ULOG_PORT_NOTIFY()` is called
-- Verify `_ULOG_UART_TX_READY()` returns true
-- Ensure `_ulog_transmit()` is being invoked
+- **Cause**: Transmitter not being triggered or transport not ready
+- **Fix**:
+  - Check `_ULOG_PORT_NOTIFY()` is called (add debug print)
+  - Verify `_ULOG_UART_TX_READY()` returns true
+  - Ensure `_ulog_transmit()` is being invoked
+  - For FreeRTOS: verify `configUSE_IDLE_HOOK` is enabled
+  - For Linux: check pthread thread is running
 
 ### Compilation errors about `__ulog_logs_start`
-- Verify linker script defines these symbols
-- Check that linker script is being used (`-T` or `-Wl,-T,script.ld`)
+- **Cause**: Linker script not being used or symbols not defined
+- **Fix**:
+  - Verify linker script is being used (`-Wl,-T,linker/ulog_mcu.ld`)
+  - Check that linker script defines `__ulog_logs_start` and `__ulog_logs_end`
+  - Ensure linker script is in the correct path
+
+### Wrong log IDs or crashes
+- **Cause**: Using wrong `ulog_id_rel` for your platform
+- **Fix**:
+  - **PIE/ASLR systems**: Use default (with subtraction)
+  - **Fixed address systems**: Define `_ULOG_ID_REL_DEFINED` and override
+  - Verify with `objdump -s -j .logs` that records are 256 bytes apart
+
+### `.logs` section too large or not loading
+- **Cause**: `.logs` being placed in flash/ROM
+- **Fix**:
+  - For MCUs: Use `ulog_mcu.ld` which places `.logs` in `LOGMETA`
+  - Verify `LOGMETA` memory region is defined correctly
+  - `.logs` should NOT be in a loadable segment (AT directive)
+
+### Struct size not exactly 256 bytes
+- **Cause**: Compiler adding padding
+- **Fix**:
+  - Struct already uses `__attribute__((packed, aligned(256)))`
+  - Verify with: `sizeof(struct ulog_record)` should be 256
+  - Check field sizes: 1 (level) + 4 (line) + 4 (typecode) + 116 (file) + 128 (fmt) + 3 (padding) = 256
 
 ## Reference Implementation
 
-For a complete example, refer to:
-- **AVR**: `include/ulog_avr_asx_gnu.h`
-- **Linux**: `include/ulog_linux_gnu.h`, `src/ulog_linux.cpp`
+For complete working examples, refer to:
+
+### Bare Metal (Fixed Addresses)
+- **Header**: `include/ulog_avr_none_gnu.h`
+- **Implementation**: `src/ulog_avr_none_gnu.cpp`
+- **Linker**: `linker/ulog_mcu.ld`
+- **Features**: Optimized ID computation, polling UART, no OS overhead
+
+### Linux (PIE/ASLR)
+- **Header**: `include/ulog_linux_gnu.h`
+- **Implementation**: `src/ulog_linux.cpp`
+- **Linker**: `linker/ulog_pie.ld`
+- **Features**: pthread synchronization, background thread, PIE-compatible
+
+### FreeRTOS (RTOS)
+- **Header**: `include/ulog_freertos_gnu.h`
+- **Implementation**: `src/ulog_freertos.cpp`
+- **Linker**: `linker/ulog_mcu.ld` (or `ulog_pie.ld` for MMU systems)
+- **Features**: Event groups, idle hook transmission, RTOS integration
+
+## Advanced Topics
+
+### Custom Log Record Structure
+
+The log record is defined as a packed struct with fixed-size arrays:
+
+```c
+struct ulog_record {
+    uint8_t level;          // 1 byte: log level
+    uint32_t line;          // 4 bytes: line number
+    uint32_t typecode;      // 4 bytes: format type encoding
+    char file[116];         // 116 bytes: source file name
+    char fmt[128];          // 128 bytes: format string
+    uint8_t _pad[3];        // 3 bytes: padding to 256 bytes
+} __attribute__((packed, aligned(256)));
+```
+
+Total size: **exactly 256 bytes** for efficient ID computation.
+
+### Performance Characteristics
+
+**Code generation** (per log call):
+- **AVR**: ~6 instructions, 1 for ID calculation
+- **x86_64**: ~10 instructions, 3 for ID calculation
+- **ARM**: Similar to x86_64
+
+**Memory overhead**:
+- 256 bytes per unique log statement (in `.logs` metadata section)
+- Runtime: Ring buffer in RAM (configurable size)
+
+**Runtime cost**:
+- Function call overhead
+- Minimal arithmetic (shift, mask, optional subtract)
+- No string formatting at log site (deferred to decoder)
+
+### Integration with Build Systems
+
+#### CMake Example
+```cmake
+target_compile_options(myapp PRIVATE -fdata-sections)
+target_link_options(myapp PRIVATE 
+    -Wl,-T,${CMAKE_SOURCE_DIR}/linker/ulog_mcu.ld
+)
+```
+
+#### Makefile Example
+```makefile
+CFLAGS += -fdata-sections
+LDFLAGS += -Wl,-T,linker/ulog_mcu.ld
+```
+
+#### Platform.io Example
+```ini
+[env:myboard]
+build_flags = 
+    -fdata-sections
+    -Wl,-T,linker/ulog_mcu.ld
+```
+
+---
+
+**For questions or issues, please refer to the main README.md or open an issue on the project repository.**
 
