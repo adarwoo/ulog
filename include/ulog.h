@@ -51,25 +51,6 @@
 extern "C" {
 #endif
 
-/**
- * Record structure for log metadata.
- * Fixed-size arrays ensure all data is embedded in .logs section.
- * Each record is exactly 256 bytes:
- * - 1 byte: level
- * - 3 bytes: padding (compiler alignment)
- * - 4 bytes: line
- * - 4 bytes: typecode  
- * - 116 bytes: file path
- * - 128 bytes: format string
- * Total: 256 bytes
- */
-struct ulog_record {
-   uint8_t  level;
-   uint32_t line;
-   uint32_t typecode;
-   char file[116];
-   char fmt[128];
-} __attribute__((packed, aligned(256)));
 
 // ============================================================================
 // Forwarding prototypes
@@ -136,28 +117,12 @@ void ulog_flush(void);
  * - Bytes 9+: file path (null-terminated, packed)
  * - Next: format string (null-terminated, packed immediately after file)
  * 
- * IMPORTANT: Format strings containing % must escape them as %% since
- * they are embedded in inline assembly.
+ * IMPORTANT: 
+ * - Format strings containing % must escape them as %% (inline assembly)
+ * - .logs section has NO "a" flag (not allocatable) - it's metadata only
  */
 #ifndef _ULOG_EMIT_RECORD
 #  error "Platform must define _ULOG_EMIT_RECORD with architecture-specific address computation"
-#  define _ULOG_EMIT_RECORD(level, fmt, typecode)                     \
-   __asm__ volatile(                                                   \
-      ".pushsection .logs,\"a\",@progbits\n\t"                         \
-      ".balign 256\n\t"                                                \
-      "1:\n\t"                                                         \
-      ".byte %c0\n\t"                                                  \
-      ".long %c1\n\t"                                                  \
-      ".long %c2\n\t"                                                  \
-      ".asciz \"" __FILE__ "\"\n\t"                                    \
-      ".asciz \"" fmt "\"\n\t"                                         \
-      ".popsection"                                                    \
-      : /* no outputs */                                               \
-      : "i" ((uint8_t)(level)),                                        \
-        "i" ((uint32_t)(__LINE__)),                                    \
-        "i" ((uint32_t)(typecode))                                     \
-   );                                                                  \
-   const uint8_t id = 0; /* ERROR: No portable way to get address! */
 #endif
 
 
@@ -440,7 +405,7 @@ namespace ulog {
                      static_cast<uint8_t>((value >> 24) & 0xFF)
                );
             } else {
-               //static_assert(0, "Unsupported integer size");
+               static_assert(sizeof(T) == 0, "Unsupported integer size");
             }
          } else if constexpr (std::is_same_v<U, float>) {
             static_assert(sizeof(float) == 4, "Unexpected float size");
@@ -459,7 +424,7 @@ namespace ulog {
                static_cast<uint8_t>(value[3])
             );
          } else {
-            //static_assert(0, "Unsupported type for packing");
+            static_assert(sizeof(U) == 0, "Unsupported type for packing");
          }
       }
 
