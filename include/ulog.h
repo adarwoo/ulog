@@ -49,7 +49,8 @@
 
 // Declare .logs section type once to prevent conflicts across translation units
 // This must come before any uses of the section attribute
-__asm__(".section .logs,\"a\",@progbits\n\t.previous");
+// Use "aw" flags (allocatable, writable) to match non-const record variables
+__asm__(".section .logs,\"aw\",@progbits\n\t.previous");
 
 #ifdef __cplusplus
 extern "C" {
@@ -146,15 +147,14 @@ static inline uint8_t ulog_id_rel(const void *p) {
  * Emit a log record into the .logs section.
  * Strings are embedded directly in the struct via fixed-size arrays.
  * 
- * Must use 'static' for function-local scope compatibility.
- * Note: When used in inline functions/headers, each translation unit
- * gets its own copy. This is acceptable since __COUNTER__ ensures
- * unique symbol names per instantiation.
+ * Note: Records are non-const to avoid section type conflicts in AVR-GCC
+ * when the same inline function is instantiated across multiple TUs.
+ * The 'used' attribute ensures they're not optimized away despite being writable.
  */
 #ifndef _ULOG_EMIT_RECORD_N
 #  define _ULOG_EMIT_RECORD_N(ID, level, fmt, typecode)                     \
    __attribute__((section(".logs"), used, aligned(256)))                   \
-   static const struct ulog_record                                         \
+   static struct ulog_record                                               \
    _ULOG_CAT(_ULOG_REC_, ID) = {                                           \
          (uint8_t)(level), (uint32_t)(__LINE__), (uint32_t)(typecode),       \
          __FILE__, fmt                                                       \
