@@ -57,11 +57,11 @@ namespace {
    }
 } // End of anonymous namespace
 
-extern "C" void _ulog_asx_send_data(const uint8_t *data, size_t len) {
+extern "C" void _ulog_avr_asx_send_data(const uint8_t *data, size_t len) {
    uart::send(std::span<const uint8_t>(data, len));
 }
 
-extern "C" bool _ulog_asx_tx_ready() {
+extern "C" bool _ulog_avr_asx_tx_ready() {
    return uart::tx_ready();
 }
 

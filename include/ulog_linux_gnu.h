@@ -3,6 +3,7 @@
 //
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // Define these macros or functions in ulog_porting.h to adapt to your platform
 
@@ -18,6 +19,14 @@ void _ulog_linux_send_data(const uint8_t *data, size_t len);
 #ifdef __cplusplus
 }
 #endif
+
+// x86-64 uses subtraction-based ID computation (supports PIE/ASLR)
+static inline uint8_t ulog_id_rel(const void *p) {
+   extern const unsigned char __ulog_logs_start[];
+   uintptr_t base = (uintptr_t)__ulog_logs_start;
+   uintptr_t addr = (uintptr_t)p;
+   return (uint8_t)(((addr - base) >> 8) & 0xFF);
+}
 
 // x86-64 optimization: Use RIP-relative addressing for direct pointer computation
 // This avoids the extern reference and is more efficient on x86-64 PIE/ASLR systems
