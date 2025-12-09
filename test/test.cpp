@@ -10,7 +10,7 @@ int main() {
 
     ULOG_MILE("Starting!");
     ULOG_MILE("Starting!");
-    ULOG_ERROR("An error occurred: %u", 42u);
+    ULOG_ERROR("An error occurred: %%u", 42u);
 
     test_log_in_c_function();
 

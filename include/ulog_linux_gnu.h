@@ -19,6 +19,30 @@ void _ulog_linux_send_data(const uint8_t *data, size_t len);
 }
 #endif
 
+// x86-64 specific: Use RIP-relative addressing for PIE/ASLR compatibility
+#if defined(__x86_64__) || defined(__amd64__)
+#  undef _ULOG_EMIT_RECORD
+#  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
+   const void *_ulog_ptr;                         \
+   __asm__ volatile(                              \
+      ".pushsection .logs,\"a\",@progbits\n\t"    \
+      ".balign 256\n\t"                           \
+      "1:\n\t"                                    \
+      ".byte %c1\n\t"                             \
+      ".long %c2\n\t"                             \
+      ".long %c3\n\t"                             \
+      ".asciz \"" __FILE__ "\"\n\t"               \
+      ".asciz \"" fmt "\"\n\t"                    \
+      ".popsection\n\t"                           \
+      "leaq 1b(%%rip), %0\n\t"                    \
+      : "=r" (_ulog_ptr)                          \
+      : "i" ((uint8_t)(level)),                   \
+        "i" ((uint32_t)(__LINE__)),               \
+        "i" ((uint32_t)(typecode))                \
+   );                                             \
+   const uint8_t id = ulog_id_rel(_ulog_ptr);
+#endif
+
 /**
  * Enter critical section
  */

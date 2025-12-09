@@ -49,8 +49,8 @@
 
 // Declare .logs section type once to prevent conflicts across translation units
 // This must come before any uses of the section attribute
-// Use "aw" flags (allocatable, writable) to match non-const record variables
-__asm__(".section .logs,\"aw\",@progbits\n\t.previous");
+// Use "a" flags (allocatable, readonly) for const data
+__asm__(".section .logs,\"a\",@progbits\n\t.previous");
 
 #ifdef __cplusplus
 extern "C" {
@@ -144,31 +144,44 @@ static inline uint8_t ulog_id_rel(const void *p) {
 #define _ULOG_CAT(a, b) _ULOG_CAT_(a, b)
 
 /**
- * Emit a log record into the .logs section.
- * Strings are embedded directly in the struct via fixed-size arrays.
+ * Emit a log record directly into the .logs section using inline assembly.
+ * This uses the same approach as the working AVR version:
+ * - Numbered local labels (1:)
+ * - Operand constraints for compile-time constants
+ * - No architecture-specific instructions in the .logs section
+ * - Address computed via platform-specific ulog_id_rel()
  * 
- * Note: Records are non-const to avoid section type conflicts in AVR-GCC
- * when the same inline function is instantiated across multiple TUs.
- * The 'used' attribute ensures they're not optimized away despite being writable.
+ * Layout (256 bytes total):
+ * - Byte 0: level (1 byte)
+ * - Bytes 1-4: line number (4 bytes)
+ * - Bytes 5-8: typecode (4 bytes)
+ * - Bytes 9+: file path (null-terminated, packed)
+ * - Next: format string (null-terminated, packed immediately after file)
+ * 
+ * IMPORTANT: Format strings containing % must escape them as %% since
+ * they are embedded in inline assembly.
  */
-#ifndef _ULOG_EMIT_RECORD_N
-#  define _ULOG_EMIT_RECORD_N(ID, level, fmt, typecode)                     \
-   __attribute__((section(".logs"), used, aligned(256)))                   \
-   static struct ulog_record                                               \
-   _ULOG_CAT(_ULOG_REC_, ID) = {                                           \
-         (uint8_t)(level), (uint32_t)(__LINE__), (uint32_t)(typecode),       \
-         __FILE__, fmt                                                       \
-   }
+#ifndef _ULOG_EMIT_RECORD
+#  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
+   const void *_ulog_ptr;                         \
+   __asm__ volatile(                              \
+      ".pushsection .logs,\"a\",@progbits\n\t"    \
+      ".balign 256\n\t"                           \
+      "1:\n\t"                                    \
+      ".byte %c1\n\t"                             \
+      ".long %c2\n\t"                             \
+      ".long %c3\n\t"                             \
+      ".asciz \"" __FILE__ "\"\n\t"               \
+      ".asciz \"" fmt "\"\n\t"                    \
+      ".popsection\n\t"                           \
+      "lea 1b, %0\n\t"                            \
+      : "=r" (_ulog_ptr)                          \
+      : "i" ((uint8_t)(level)),                   \
+        "i" ((uint32_t)(__LINE__)),               \
+        "i" ((uint32_t)(typecode))                \
+   );                                             \
+   const uint8_t id = ulog_id_rel(_ulog_ptr);
 #endif
-
-// Given a unique (for the current file) ID, emit a content and set the id variable
-#define _ULOG_GENERATE_LOG_ID_N(N, level, fmt, typecode)           \
-   _ULOG_EMIT_RECORD_N(N, level, fmt, typecode);                   \
-   const uint8_t id = ulog_id_rel(&_ULOG_CAT(_ULOG_REC_, N));
-
-// Common macro to generate log ID based on unique number 
-#define _ULOG_EMIT_RECORD_WITH_ID(level, fmt, typecode) \
-   _ULOG_GENERATE_LOG_ID_N(__COUNTER__, level, fmt, typecode)           
 
 
 // This section creates the macros for C usage
@@ -278,13 +291,13 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_0(level, fmt) \
    do { \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, 0) \
+      _ULOG_EMIT_RECORD(level, fmt, 0) \
       _ulog_dispatch_0(id); \
    } while(0)
 
 #define _ULOG_DISPATCH_1(level, fmt, a) \
    do { \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, _ULOG_TC(a)) \
+      _ULOG_EMIT_RECORD(level, fmt, _ULOG_TC(a)) \
       _Generic((a), \
          uint8_t:  _ulog_dispatch_1_u8(id, a), \
          int8_t:   _ulog_dispatch_1_u8(id, a), \
@@ -299,7 +312,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_2(level, fmt, a, b) \
    do { \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, ((_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _Generic((a), \
          uint8_t: _Generic((b), \
             uint8_t:  _ulog_dispatch_2_u8_u8( id, a, b), \
@@ -341,7 +354,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_3(level, fmt, a, b, c) \
    do { \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, ((_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _Generic((a), \
          uint8_t: _Generic((b), \
             uint8_t: _ulog_dispatch_3_u8_u8_u8(id, a, b, c), \
@@ -353,7 +366,7 @@ static inline void _ulog_dispatch_4_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b
 
 #define _ULOG_DISPATCH_4(level, fmt, a, b, c, d) \
    do { \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, ((_ULOG_TC(d) << 24) | (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(d) << 24) | (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))) \
       _ulog_dispatch_4_u8_u8_u8_u8(id, a, b, c, d); \
    } while(0)
 
@@ -489,10 +502,11 @@ namespace ulog {
 do {                                                                          \
    [&]<typename... Args>(Args&&... args) {                                    \
       constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
+      (void)_typecode; /* suppress unused warning when inlined as constant */ \
       auto values = ::ulog::detail::pack_bytes_to_tuple(args...);             \
       constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value;    \
       static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload");  \
-      _ULOG_EMIT_RECORD_WITH_ID(level, fmt, _typecode);                       \
+      _ULOG_EMIT_RECORD(level, fmt, _typecode);                       \
       if constexpr (_nbytes == 0) {                                           \
          ulog_detail_enqueue(id);                                             \
       } else if constexpr (_nbytes == 1) {                                    \
