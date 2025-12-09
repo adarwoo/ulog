@@ -1,4 +1,5 @@
 #include "ulog.h"
+#include "test.hpp"
 
 extern "C" {
     void test_log_in_c_function();
