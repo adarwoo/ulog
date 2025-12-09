@@ -41,11 +41,14 @@ bool _ulog_avr_asx_tx_ready();
  * Only the high byte (bits 8-15) of the label address is needed for the ID.
  * Each invocation gets a unique local label (1:) which is guaranteed unique
  * per inline asm block by the assembler.
+ * 
+ * NOTE: .logs section is metadata-only (parsed from ELF by host tools),
+ * so it uses NO "a" flag to prevent it from being counted in device memory.
  */
 #define _ULOG_EMIT_RECORD(level, fmt, typecode)                       \
    uint8_t id;                                                        \
    __asm__ volatile(                                                  \
-      ".pushsection .logs,\"a\",@progbits\n\t"                        \
+      ".pushsection .logs,\"\",@progbits\n\t"                          \
       ".balign 256\n\t"                                               \
       "1:\n\t"                                                        \
       ".byte %c1\n\t"                                                 \

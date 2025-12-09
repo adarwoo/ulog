@@ -30,12 +30,13 @@ static inline uint8_t ulog_id_rel(const void *p) {
 
 // x86-64 optimization: Use RIP-relative addressing for direct pointer computation
 // This avoids the extern reference and is more efficient on x86-64 PIE/ASLR systems
+// NOTE: .logs has NO "a" flag - it's metadata only, not loaded at runtime
 #if defined(__x86_64__) || defined(__amd64__)
 #  undef _ULOG_EMIT_RECORD
 #  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
    const void *_ulog_ptr;                         \
    __asm__ volatile(                              \
-      ".pushsection .logs,\"a\",@progbits\n\t"    \
+      ".pushsection .logs,\"\",@progbits\n\t"      \
       ".balign 256\n\t"                           \
       "1:\n\t"                                    \
       ".byte %c1\n\t"                             \
