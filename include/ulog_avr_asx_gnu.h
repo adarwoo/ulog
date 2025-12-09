@@ -37,13 +37,26 @@ bool _ulog_avr_asx_tx_ready();
     _ulog_avr_asx_tx_ready()
 
 /**
- * AVR-optimized ID computation (no subtraction!).
- * AVR has fixed addresses, so we extract ID directly from address bits 8-15.
- * This saves one SUB instruction - critical for AVR performance.
+ * AVR-specific log record emission using direct register loading.
+ * Only the high byte (bits 8-15) of the label address is needed for the ID.
+ * Each invocation gets a unique local label (1:) which is guaranteed unique
+ * per inline asm block by the assembler.
  */
-#define ULOG_CUSTOM_ID_REL
-static inline uint8_t ulog_id_rel(const void *p) {
-   uintptr_t addr = (uintptr_t)p;
-   return (uint8_t)((addr >> 8) & 0xFF);
-}
-
+#define _ULOG_EMIT_RECORD(level, fmt, typecode)                       \
+   uint8_t id;                                                        \
+   __asm__ volatile(                                                  \
+      ".pushsection .logs,\"a\",@progbits\n\t"                        \
+      ".balign 256\n\t"                                               \
+      "1:\n\t"                                                        \
+      ".byte %c1\n\t"                                                 \
+      ".long %c2\n\t"                                                 \
+      ".long %c3\n\t"                                                 \
+      ".asciz \"" __FILE__ "\"\n\t"                                   \
+      ".asciz \"" fmt "\"\n\t"                                        \
+      ".popsection\n\t"                                               \
+      "ldi %0, hi8(1b)"                                               \
+      : "=r" (id)                                                     \
+      : "i" ((uint8_t)(level)),                                       \
+        "i" ((uint32_t)(__LINE__)),                                   \
+        "i" ((uint32_t)(typecode))                                    \
+   );

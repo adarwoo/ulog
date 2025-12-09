@@ -86,23 +86,6 @@ void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2);
 void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3);
 void ulog_flush(void);
 
-// Brought in from the linker script. Marks the start of the .logs section
-extern const unsigned char __ulog_logs_start[];
-
-/**
- * Compute log ID from record address.
- * Default implementation: subtract base and extract high byte.
- * Platforms can override by defining this function before including ulog.h.
- */
-#ifndef _ULOG_ID_REL_DEFINED
-#define _ULOG_ID_REL_DEFINED
-static inline uint8_t ulog_id_rel(const void *p) {
-   uintptr_t base = (uintptr_t)__ulog_logs_start;
-   uintptr_t addr = (uintptr_t)p;
-   return (uint8_t)(((addr - base) >> 8) & 0xFF);
-}
-#endif
-
 #ifdef __cplusplus
 }
 #endif
@@ -139,18 +122,17 @@ static inline uint8_t ulog_id_rel(const void *p) {
 // Helpers to generate .logs section and get ID
 // ============================================================================
 
-// Helpers for token pasting
-#define _ULOG_CAT_(a, b) a##b
-#define _ULOG_CAT(a, b) _ULOG_CAT_(a, b)
-
 /**
  * Emit a log record directly into the .logs section using inline assembly.
- * Portable approach:
- * - Uses __COUNTER__ + __LINE__ for unique labels per invocation within a TU
- * - Static linkage prevents symbol conflicts between translation units
- * - Operand constraints for compile-time constants
- * - No CPU-specific address loading in this generic version
- * - Platforms can override for optimization (see ulog_linux_gnu.h)
+ * 
+ * This generic implementation creates .logs section entries but DOES NOT
+ * provide a way to get the record address portably. Each platform MUST
+ * override this macro with architecture-specific address computation.
+ * 
+ * Platform implementations:
+ * - x86-64: Uses RIP-relative LEA (see ulog_linux_gnu.h)
+ * - AVR: Uses LPM/LDS with program memory addressing (see ulog_avr_asx_gnu.h)  
+ * - ARM: Uses PC-relative addressing
  * 
  * Layout (256 bytes total):
  * - Byte 0: level (1 byte)
@@ -162,33 +144,25 @@ static inline uint8_t ulog_id_rel(const void *p) {
  * IMPORTANT: Format strings containing % must escape them as %% since
  * they are embedded in inline assembly.
  */
-#define _ULOG_STR(x) #x
-#define _ULOG_XSTR(x) _ULOG_STR(x)
-
-#ifndef _ULOG_EMIT_RECORD_IMPL
-#  define _ULOG_EMIT_RECORD_IMPL(level, fmt, typecode, counter, line) \
-   __asm__ volatile(                                           \
-      ".pushsection .logs,\"a\",@progbits\n\t"                 \
-      ".balign 256\n\t"                                        \
-      "_ulog_lbl_" _ULOG_XSTR(counter) "_" _ULOG_XSTR(line) ":\n\t" \
-      ".byte %c0\n\t"                                          \
-      ".long %c1\n\t"                                          \
-      ".long %c2\n\t"                                          \
-      ".asciz \"" __FILE__ "\"\n\t"                            \
-      ".asciz \"" fmt "\"\n\t"                                 \
-      ".popsection"                                            \
-      : /* no outputs */                                        \
-      : "i" ((uint8_t)(level)),                                \
-        "i" ((uint32_t)(__LINE__)),                            \
-        "i" ((uint32_t)(typecode))                             \
-   );                                                           \
-   static const char _ulog_lbl_ ## counter ## _ ## line __attribute__((unused)); \
-   const uint8_t id = ulog_id_rel(&_ulog_lbl_ ## counter ## _ ## line);
-#endif
-
 #ifndef _ULOG_EMIT_RECORD
-#  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
-   _ULOG_EMIT_RECORD_IMPL(level, fmt, typecode, __COUNTER__, __LINE__)
+#  error "Platform must define _ULOG_EMIT_RECORD with architecture-specific address computation"
+#  define _ULOG_EMIT_RECORD(level, fmt, typecode)                     \
+   __asm__ volatile(                                                   \
+      ".pushsection .logs,\"a\",@progbits\n\t"                         \
+      ".balign 256\n\t"                                                \
+      "1:\n\t"                                                         \
+      ".byte %c0\n\t"                                                  \
+      ".long %c1\n\t"                                                  \
+      ".long %c2\n\t"                                                  \
+      ".asciz \"" __FILE__ "\"\n\t"                                    \
+      ".asciz \"" fmt "\"\n\t"                                         \
+      ".popsection"                                                    \
+      : /* no outputs */                                               \
+      : "i" ((uint8_t)(level)),                                        \
+        "i" ((uint32_t)(__LINE__)),                                    \
+        "i" ((uint32_t)(typecode))                                     \
+   );                                                                  \
+   const uint8_t id = 0; /* ERROR: No portable way to get address! */
 #endif
 
 

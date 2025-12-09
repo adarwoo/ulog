@@ -3,8 +3,6 @@
  * @file ulog_port.h
  * @brief Porting layer for the ulog logging framework.
  */
-#include "ulog.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,3 +38,5 @@ void _ulog_init();
 // ---------------------------------------------------------------------------
 // End of platform detection
 // ---------------------------------------------------------------------------
+
+#include "ulog.h"

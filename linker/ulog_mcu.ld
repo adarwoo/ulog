@@ -4,7 +4,6 @@
  * 
  * For systems with fixed addresses (AVR, ARM Cortex-M, RISC-V, etc.)
  * The .logs section contains metadata only (not stored in flash/ROM).
- * No subtraction needed in ulog_id_rel() - extract ID directly from address bits.
  * 
  * Usage: Add to linker flags: -Wl,-T,ulog_mcu.ld
  * 
