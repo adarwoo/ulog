@@ -6,7 +6,6 @@
  */
 #include "ulog.h"
 
-
 //
 // Apply configuration defaults
 //

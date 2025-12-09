@@ -165,30 +165,25 @@ static inline uint8_t ulog_id_rel(const void *p) {
 #define _ULOG_STR(x) #x
 #define _ULOG_XSTR(x) _ULOG_STR(x)
 
-#ifndef _ULOG_EMIT_RECORD_IMPL
-#  define _ULOG_EMIT_RECORD_IMPL(level, fmt, typecode, counter, line) \
+#ifndef _ULOG_EMIT_RECORD
+#  define _ULOG_EMIT_RECORD(level, fmt, typecode)              \
    __asm__ volatile(                                           \
       ".pushsection .logs,\"a\",@progbits\n\t"                 \
       ".balign 256\n\t"                                        \
-      "_ulog_lbl_" _ULOG_XSTR(counter) "_" _ULOG_XSTR(line) ":\n\t" \
+      "1:\n\t"                                                 \
       ".byte %c0\n\t"                                          \
       ".long %c1\n\t"                                          \
       ".long %c2\n\t"                                          \
       ".asciz \"" __FILE__ "\"\n\t"                            \
       ".asciz \"" fmt "\"\n\t"                                 \
       ".popsection"                                            \
-      : /* no outputs */                                        \
+      : /* no outputs */                                       \
       : "i" ((uint8_t)(level)),                                \
         "i" ((uint32_t)(__LINE__)),                            \
         "i" ((uint32_t)(typecode))                             \
-   );                                                           \
-   static const char _ulog_lbl_ ## counter ## _ ## line __attribute__((unused)); \
-   const uint8_t id = ulog_id_rel(&_ulog_lbl_ ## counter ## _ ## line);
-#endif
-
-#ifndef _ULOG_EMIT_RECORD
-#  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
-   _ULOG_EMIT_RECORD_IMPL(level, fmt, typecode, __COUNTER__, __LINE__)
+   );                                                          \
+   extern const char _ulog_label[] asm("1b");                  \
+   const uint8_t id = ulog_id_rel(_ulog_label);
 #endif
 
 

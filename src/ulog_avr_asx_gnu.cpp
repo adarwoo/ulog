@@ -6,10 +6,10 @@
 #include <interrupt.h>
 
 #include <string_view>
-#include <ulog_port.h>
-
 #include <asx/uart.hpp>
 #include <asx/reactor.hpp>
+
+#include "ulog.h"
 
 // Allow selecting the UART to use for ULOG
 // To be added to conf_ulog.h if needed

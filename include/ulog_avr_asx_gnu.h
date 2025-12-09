@@ -4,12 +4,13 @@
  */
 #include <reactor.h>
 #include <avr/interrupt.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-reactor_handle_t _ulog_asx_react_to_initiate_transmit;
+extern reactor_handle_t _ulog_asx_react_to_initiate_transmit;
 void _ulog_avr_asx_send_data(const uint8_t *data, size_t len);
 bool _ulog_avr_asx_tx_ready();
 
@@ -22,10 +23,10 @@ bool _ulog_avr_asx_tx_ready();
 //
 
 #define _ULOG_PORT_ENTER_CRITICAL_SECTION() \
-    irqflags_t save_flags = cpu_irq_save()
+    uint8_t flags = SREG; cli()
 
 #define _ULOG_PORT_EXIT_CRITICAL_SECTION() \
-    cpu_irq_restore(save_flags)
+    SREG = flags; sei()
 
 #define _ULOG_PORT_NOTIFY() \
     reactor_null_notify_from_isr(_ulog_asx_react_to_initiate_transmit);
@@ -41,7 +42,7 @@ bool _ulog_avr_asx_tx_ready();
  * AVR has fixed addresses, so we extract ID directly from address bits 8-15.
  * This saves one SUB instruction - critical for AVR performance.
  */
-#define ULOG_CUSTOM_ID_REL
+#define _ULOG_ID_REL_DEFINED
 static inline uint8_t ulog_id_rel(const void *p) {
    uintptr_t addr = (uintptr_t)p;
    return (uint8_t)((addr >> 8) & 0xFF);
