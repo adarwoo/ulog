@@ -19,7 +19,8 @@ void _ulog_linux_send_data(const uint8_t *data, size_t len);
 }
 #endif
 
-// x86-64 specific: Use RIP-relative addressing for PIE/ASLR compatibility
+// x86-64 optimization: Use RIP-relative addressing for direct pointer computation
+// This avoids the extern reference and is more efficient on x86-64 PIE/ASLR systems
 #if defined(__x86_64__) || defined(__amd64__)
 #  undef _ULOG_EMIT_RECORD
 #  define _ULOG_EMIT_RECORD(level, fmt, typecode) \
