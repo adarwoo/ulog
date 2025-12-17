@@ -5,7 +5,7 @@
  * @author software@arreckx.com
  */
 #include "ulog.h"
-
+#include <stdio.h>
 //
 // Apply configuration defaults
 //
@@ -267,7 +267,13 @@ void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8
 
 void ulog_flush(void) {
    // Keep transmitting until the buffer is empty
+   _ULOG_PORT_ENTER_CRITICAL_SECTION();
+
    while (log_tail != log_head) {
+      _ULOG_PORT_EXIT_CRITICAL_SECTION();
       _ulog_transmit();
+      _ULOG_PORT_ENTER_CRITICAL_SECTION();
    }
+   
+   _ULOG_PORT_EXIT_CRITICAL_SECTION();
 }

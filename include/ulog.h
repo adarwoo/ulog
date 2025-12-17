@@ -92,7 +92,7 @@ void ulog_flush(void);
 #define ULOG_TRAIT_ID_U32   0x40L
 #define ULOG_TRAIT_ID_S32   0x41L
 #define ULOG_TRAIT_ID_FLOAT 0x42L
-#define ULOG_TRAIT_ID_STR4  0x43L
+#define ULOG_TRAIT_ID_STR   0x43L
 
 // ============================================================================
 // Helpers to generate .logs section and get ID
@@ -125,6 +125,10 @@ void ulog_flush(void);
 #  error "Platform must define _ULOG_EMIT_RECORD with architecture-specific address computation"
 #endif
 
+
+#ifndef _ULOG_MAX_STR_LENGTH
+#  define _ULOG_MAX_STR_LENGTH 16
+#endif
 
 // This section creates the macros for C usage
 // C++ users should use the templated version in ulog.hpp which is more type-safe
@@ -332,17 +336,17 @@ namespace ulog {
    namespace detail {
       /** Value to pack for the argument trait */
       enum class ArgTrait : uint8_t {
-         none    = ULOG_TRAIT_ID_NONE,
-         u8      = ULOG_TRAIT_ID_U8,
-         s8      = ULOG_TRAIT_ID_S8,
-         b8      = ULOG_TRAIT_ID_BOOL,
-         u16     = ULOG_TRAIT_ID_U16,
-         s16     = ULOG_TRAIT_ID_S16,
-         ptr16   = ULOG_TRAIT_ID_PTR,
-         u32     = ULOG_TRAIT_ID_U32,
-         s32     = ULOG_TRAIT_ID_S32,
-         float32 = ULOG_TRAIT_ID_FLOAT,
-         str4    = ULOG_TRAIT_ID_STR4
+         none      = ULOG_TRAIT_ID_NONE,
+         u8        = ULOG_TRAIT_ID_U8,
+         s8        = ULOG_TRAIT_ID_S8,
+         b8        = ULOG_TRAIT_ID_BOOL,
+         u16       = ULOG_TRAIT_ID_U16,
+         s16       = ULOG_TRAIT_ID_S16,
+         ptr16     = ULOG_TRAIT_ID_PTR,
+         u32       = ULOG_TRAIT_ID_U32,
+         s32       = ULOG_TRAIT_ID_S32,
+         float32   = ULOG_TRAIT_ID_FLOAT,
+         str       = ULOG_TRAIT_ID_STR,
       };
 
       template <typename T>
@@ -352,7 +356,7 @@ namespace ulog {
          if constexpr (std::is_same_v<U, bool>)
             return ArgTrait::b8;
          else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>)
-            return ArgTrait::str4;
+            return ArgTrait::str;
          else if constexpr (std::is_floating_point_v<U>)
             return ArgTrait::float32;
          else if constexpr (std::is_pointer_v<U> && sizeof(U) == 2)
@@ -437,38 +441,101 @@ namespace ulog {
 
          return std::tuple_cat(split_to_u8_tuple(std::forward<Args>(args))...);
       }
+
+      // Helper to send a string in 4-byte chunks
+      template <typename IdType>
+      inline void send_string_chunks(IdType id, const char* str) {
+         size_t pos = 0;
+         
+         while (true) {
+            uint8_t b0 = str[pos];
+            if ( b0 == 0 ) {
+               ulog_detail_enqueue_1(id, uint8_t{0});
+               break;
+            }
+
+            uint8_t b1 = str[pos+1];
+            if ( b1 == 0 ) {
+               ulog_detail_enqueue_2(id, b0, uint8_t{0});
+               break;
+            }
+            uint8_t b2 = str[pos+2];
+            if ( b2 == 0 ) {
+               ulog_detail_enqueue_3(id, b0, b1, uint8_t{0});
+               break;
+            }
+            uint8_t b3 = str[pos+3];
+            if ( b3 == 0 ) {
+               ulog_detail_enqueue_4(id, b0, b1, b2, uint8_t{0});
+               break;
+            } else {
+               // If there is less than 4 chars left, we don't need to truncate
+               if ( pos > (_ULOG_MAX_STR_LENGTH-3) and (std::strlen(str + pos) > 3) ) {
+                  // Safety break to avoid infinite loops on malformed strings or long strings
+                  ulog_detail_enqueue_4(id, uint8_t{'.'}, uint8_t{'.'}, uint8_t{'.'}, uint8_t{0});
+                  break;
+               }
+               
+               ulog_detail_enqueue_4(id, b0, b1, b2, b3);
+
+               pos += 4;
+            }
+         }
+      }
    } // namespace detail
 } // namespace ulog
 
 #define ULOG(level, fmt, ...)                                                 \
 do {                                                                          \
    [&]<typename... Args>(Args&&... args) {                                    \
-      constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
-      (void)_typecode; /* suppress unused warning when inlined as constant */ \
-      auto values = ::ulog::detail::pack_bytes_to_tuple(args...);             \
-      constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value;    \
-      static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload");  \
-      _ULOG_EMIT_RECORD(level, fmt, _typecode);                       \
-      if constexpr (_nbytes == 0) {                                           \
-         ulog_detail_enqueue(id);                                             \
-      } else if constexpr (_nbytes == 1) {                                    \
-         auto&& b0 = std::get<0>(values);                                     \
-         ulog_detail_enqueue_1(id, b0);                                       \
-      } else if constexpr (_nbytes == 2) {                                    \
-         auto&& b0 = std::get<0>(values);                                     \
-         auto&& b1 = std::get<1>(values);                                     \
-         ulog_detail_enqueue_2(id, b0, b1);                                   \
-      } else if constexpr (_nbytes == 3) {                                    \
-         auto&& b0 = std::get<0>(values);                                     \
-         auto&& b1 = std::get<1>(values);                                     \
-         auto&& b2 = std::get<2>(values);                                     \
-         ulog_detail_enqueue_3(id, b0, b1, b2);                               \
-      } else if constexpr (_nbytes == 4) {                                    \
-         auto&& b0 = std::get<0>(values);                                     \
-         auto&& b1 = std::get<1>(values);                                     \
-         auto&& b2 = std::get<2>(values);                                     \
-         auto&& b3 = std::get<3>(values);                                     \
-         ulog_detail_enqueue_4(id, b0, b1, b2, b3);                           \
+      /* Check if any argument is a string pointer or char array */           \
+      constexpr bool has_string = (... || (                                   \
+         std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, const char*> || \
+         std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, char*> || \
+         (std::is_array_v<std::remove_reference_t<Args>> &&                   \
+          std::is_same_v<std::remove_cv_t<std::remove_extent_t<std::remove_reference_t<Args>>>, char>))); \
+      if constexpr (has_string) {                                             \
+         constexpr size_t nargs = sizeof...(Args);                            \
+         static_assert(nargs == 1, "ULOG with strings supports only one string argument"); \
+         auto process_string = [](auto&& arg) {                               \
+            _ULOG_EMIT_RECORD(level, fmt, ULOG_TRAIT_ID_STR);                 \
+            const char* str = arg;                                            \
+            if (not str or std::strlen(str) == 0) {                           \
+               ulog_detail_enqueue(id);                                       \
+            } else {                                                          \
+               ::ulog::detail::send_string_chunks(id, str);                   \
+            }                                                                 \
+         };                                                                   \
+         (process_string(args), ...);                                         \
+      } else {                                                                \
+         /* Original non-string handling */                                   \
+         constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
+         (void)_typecode; /* suppress unused warning when inlined as constant */ \
+         auto values = ::ulog::detail::pack_bytes_to_tuple(args...);         \
+         constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value; \
+         static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload"); \
+         _ULOG_EMIT_RECORD(level, fmt, _typecode);                            \
+         if constexpr (_nbytes == 0) {                                        \
+            ulog_detail_enqueue(id);                                          \
+         } else if constexpr (_nbytes == 1) {                                 \
+            auto&& b0 = std::get<0>(values);                                  \
+            ulog_detail_enqueue_1(id, b0);                                    \
+         } else if constexpr (_nbytes == 2) {                                 \
+            auto&& b0 = std::get<0>(values);                                  \
+            auto&& b1 = std::get<1>(values);                                  \
+            ulog_detail_enqueue_2(id, b0, b1);                                \
+         } else if constexpr (_nbytes == 3) {                                 \
+            auto&& b0 = std::get<0>(values);                                  \
+            auto&& b1 = std::get<1>(values);                                  \
+            auto&& b2 = std::get<2>(values);                                  \
+            ulog_detail_enqueue_3(id, b0, b1, b2);                            \
+         } else if constexpr (_nbytes == 4) {                                 \
+            auto&& b0 = std::get<0>(values);                                  \
+            auto&& b1 = std::get<1>(values);                                  \
+            auto&& b2 = std::get<2>(values);                                  \
+            auto&& b3 = std::get<3>(values);                                  \
+            ulog_detail_enqueue_4(id, b0, b1, b2, b3);                        \
+         }                                                                    \
       }                                                                       \
    }(__VA_ARGS__);                                                            \
 } while(0)

@@ -23,10 +23,10 @@ bool _ulog_avr_asx_tx_ready();
 //
 
 #define _ULOG_PORT_ENTER_CRITICAL_SECTION() \
-    uint8_t flags = SREG; cli()
+    cli()
 
 #define _ULOG_PORT_EXIT_CRITICAL_SECTION() \
-    SREG = flags; sei()
+    sei()
 
 #define _ULOG_PORT_NOTIFY() \
     reactor_null_notify_from_isr(_ulog_asx_react_to_initiate_transmit);

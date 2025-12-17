@@ -13,7 +13,7 @@ CC  ?= gcc
 TARGET      := test
 SRC_DIR     := ../src
 INC_DIR     := ../include
-LINK_SCRIPT := ulog_x86_64_linux_gnu.ld
+LINK_SCRIPT := ../linker/ulog_pie.ld
 
 # Sources
 CXX_SRCS := $(SRC_DIR)/ulog_linux.cpp test.cpp

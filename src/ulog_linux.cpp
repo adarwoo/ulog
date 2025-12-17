@@ -13,12 +13,13 @@ extern "C" {
    void _ulog_transmit();
    void _ulog_init();
    void _ulog_linux_send_data(const uint8_t *data, size_t len) {
-         // For demonstration, print the data as hex to stdout
-         for (size_t i = 0; i < len; ++i) {
-            printf("%02x ", data[i]);
-         }
+        // For demonstration, print the data as hex to stdout
+        for (size_t i = 0; i < len; ++i) {
+        printf("%02x ", data[i]);
+        }
 
-         printf("\n");
+        printf("\n");
+        fflush(stdout);
     }
 
     pthread_mutex_t ulog_tx_semaphore = PTHREAD_MUTEX_INITIALIZER;
@@ -41,6 +42,13 @@ namespace {
             while (true) {
                 // Wait for notification
                 pthread_mutex_lock(&ulog_tx_semaphore);
+                
+                // Check stop flag BEFORE waiting
+                if (stop_thread) {
+                    pthread_mutex_unlock(&ulog_tx_semaphore);
+                    break;
+                }
+                
                 pthread_cond_wait(&ulog_tx_condition, &ulog_tx_semaphore);
                 
                 if (stop_thread) {
@@ -73,5 +81,3 @@ namespace {
         pthread_join(_ulog_tx_thread, NULL);
     }
 }
-        
-

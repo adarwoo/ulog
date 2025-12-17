@@ -27,31 +27,31 @@ bool _ulog_avr_tx_ready(void);
  * Enter critical section (disable interrupts)
  */
 #define _ULOG_PORT_ENTER_CRITICAL_SECTION() \
-    uint8_t _sreg_save = SREG; cli()
+   cli()
 
 /**
  * Exit critical section (restore interrupts)
  */
 #define _ULOG_PORT_EXIT_CRITICAL_SECTION() \
-    SREG = _sreg_save; sei();
+   sei();
 
 /**
  * Notify transmitter (polling mode - no notification needed)
  */
 #define _ULOG_PORT_NOTIFY() \
-    do { } while(0)
+   do { } while(0)
 
 /**
  * Send data over UART
  */
 #define _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len) \
-    _ulog_avr_send_data(tx_encoded, encoded_len)
+   _ulog_avr_send_data(tx_encoded, encoded_len)
 
 /**
  * Check if UART is ready to transmit
  */
 #define _ULOG_UART_TX_READY() \
-    _ulog_avr_tx_ready()
+   _ulog_avr_tx_ready()
 
 /**
  * AVR-optimized ID computation (no subtraction!).
