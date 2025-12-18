@@ -33,7 +33,7 @@ SYS_LIBS := -lpthread
 COMMON_WARN   := -Wall -Wextra -Werror -Wshadow -Wconversion -Wstrict-aliasing
 COMMON_DEFS   :=
 COMMON_STD_CXX:= -std=c++17
-COMMON_STD_C  := -std=c11
+COMMON_STD_C  := -std=gnu11
 
 # Dependency generation
 DEPFLAGS := -MMD -MP
