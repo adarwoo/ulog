@@ -51,3 +51,4 @@ void _ulog_freertos_send_data(const uint8_t *data, size_t len);
  * Platform-specific implementation required
  */
 #define _ULOG_UART_TX_READY() true
+
