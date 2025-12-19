@@ -13,8 +13,9 @@
  * - Zero runtime format string overhead
  * - Compile-time argument encoding and dispatch
  * - Interrupt compatible
- * - Packed binary logs with 0/1/2/4-byte payloads
- * - Auto-tagged log level and type signature
+ * - Each argument sent as a dedicated packet (no size limit per argument)
+ * - Auto-tagged log level and type signature (4-bit traits)
+ * - Supports up to 8 arguments per log call
  * - Inline assembly generates .logs metadata per callsite
  * - Messages are sent over a UART using COBS encoding
  *
@@ -36,7 +37,8 @@
  * ULOG_INFO("Temp: {.<4f}", temperature);
  * ```
  *
- * @note Only types up to 4 bytes total are supported per log. Format strings must be literals.
+ * @note Only up to 8 arguments are supported per log. Each argument is sent as a separate packet.
+ * @note Format strings must be literals.
  * @note The `.logs` section can be parsed from the ELF to map runtime packets back to messages.
  * @note You are limited to 255 messages per application
  * @note This header is C and C++ compatible, each language use an optimized version - more type safe for C++
@@ -82,19 +84,20 @@ void ulog_flush(void);
 #define ULOG_LEVEL_DEBUG3   8
 
 // ============================================================================
-// C type codes
+// C type codes - 4-bit encoding (0x0 to 0xF)
+// Allows packing 8 argument types into a single 32-bit value
 // ============================================================================
-#define ULOG_TRAIT_ID_NONE  0x00L
-#define ULOG_TRAIT_ID_U8    0x10L
-#define ULOG_TRAIT_ID_S8    0x11L
-#define ULOG_TRAIT_ID_BOOL  0x12L
-#define ULOG_TRAIT_ID_U16   0x20L
-#define ULOG_TRAIT_ID_S16   0x21L
-#define ULOG_TRAIT_ID_PTR   0x22L
-#define ULOG_TRAIT_ID_U32   0x40L
-#define ULOG_TRAIT_ID_S32   0x41L
-#define ULOG_TRAIT_ID_FLOAT 0x42L
-#define ULOG_TRAIT_ID_STR   0x43L
+#define ULOG_TRAIT_ID_NONE  0x0L
+#define ULOG_TRAIT_ID_U8    0x1L
+#define ULOG_TRAIT_ID_S8    0x2L
+#define ULOG_TRAIT_ID_BOOL  0x3L
+#define ULOG_TRAIT_ID_U16   0x4L
+#define ULOG_TRAIT_ID_S16   0x5L
+#define ULOG_TRAIT_ID_PTR   0x6L
+#define ULOG_TRAIT_ID_U32   0x7L
+#define ULOG_TRAIT_ID_S32   0x8L
+#define ULOG_TRAIT_ID_FLOAT 0x9L
+#define ULOG_TRAIT_ID_STR   0xAL
 
 // ============================================================================
 // Helpers to generate .logs section and get ID
@@ -256,44 +259,27 @@ static inline void _ulog_dispatch_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b, 
       _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
       _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
       _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
-      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(b) << 8) | _ULOG_TC(a))); \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _Generic((a), \
-         uint8_t: _Generic((b), \
-            uint8_t:  _ulog_dispatch_u8_u8( id, a, b), \
-            int8_t:   _ulog_dispatch_u8_u8( id, a, b), \
-            _Bool:    _ulog_dispatch_u8_u8( id, a, b), \
-            uint16_t: _ulog_dispatch_u8_u16(id, a, b), \
-            int16_t:  _ulog_dispatch_u8_u16(id, a, b), \
-            default:  _ulog_dispatch_u8_u8( id, a, b)), \
-         int8_t: _Generic((b), \
-            uint8_t:  _ulog_dispatch_u8_u8( id, a, b), \
-            int8_t:   _ulog_dispatch_u8_u8( id, a, b), \
-            _Bool:    _ulog_dispatch_u8_u8( id, a, b), \
-            uint16_t: _ulog_dispatch_u8_u16(id, a, b), \
-            int16_t:  _ulog_dispatch_u8_u16(id, a, b), \
-            default:  _ulog_dispatch_u8_u8( id, a, b)), \
-         _Bool: _Generic((b), \
-            uint8_t:  _ulog_dispatch_u8_u8( id, a, b), \
-            int8_t:   _ulog_dispatch_u8_u8( id, a, b), \
-            _Bool:    _ulog_dispatch_u8_u8( id, a, b), \
-            uint16_t: _ulog_dispatch_u8_u16(id, a, b), \
-            int16_t:  _ulog_dispatch_u8_u16(id, a, b), \
-            default:  _ulog_dispatch_u8_u8( id, a, b)), \
-         uint16_t: _Generic((b), \
-            uint8_t:  _ulog_dispatch_u16_u8( id, a, b), \
-            int8_t:   _ulog_dispatch_u16_u8( id, a, b), \
-            _Bool:    _ulog_dispatch_u16_u8( id, a, b), \
-            uint16_t: _ulog_dispatch_u16_u16(id, a, b), \
-            int16_t:  _ulog_dispatch_u16_u16(id, a, b), \
-            default:  _ulog_dispatch_u16_u8( id, a, b)), \
-         int16_t: _Generic((b), \
-            uint8_t:  _ulog_dispatch_u16_u8( id, a, b), \
-            int8_t:   _ulog_dispatch_u16_u8( id, a, b), \
-            _Bool:    _ulog_dispatch_u16_u8( id, a, b), \
-            uint16_t: _ulog_dispatch_u16_u16(id, a, b), \
-            int16_t:  _ulog_dispatch_u16_u16(id, a, b), \
-            default:  _ulog_dispatch_u16_u8( id, a, b)), \
-         default: _ulog_dispatch_u8_u8(id, a, b)); \
+         uint8_t:  _ulog_dispatch_u8(id, a), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)a), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)a), \
+         uint16_t: _ulog_dispatch_u16(id, a), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)a), \
+         uint32_t: _ulog_dispatch_u32(id, a), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)a), \
+         float:    _ulog_dispatch_float(id, a), \
+         double:   _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), \
+         uint8_t:  _ulog_dispatch_u8(id, b), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)b), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)b), \
+         uint16_t: _ulog_dispatch_u16(id, b), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)b), \
+         uint32_t: _ulog_dispatch_u32(id, b), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)b), \
+         float:    _ulog_dispatch_float(id, b), \
+         double:   _ulog_dispatch_float(id, (float)b)); \
       _Pragma("GCC diagnostic pop") \
    } while(0)
 
@@ -303,33 +289,161 @@ static inline void _ulog_dispatch_u8_u8_u8_u8(uint8_t id, uint8_t a, uint8_t b, 
       _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
       _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
       _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
-      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))); \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _Generic((a), \
-         uint8_t: _Generic((b), \
-            uint8_t: _ulog_dispatch_u8_u8_u8(id, a, b, c), \
-            uint16_t: _Generic((c), \
-               uint8_t: _ulog_dispatch_u8_u16_u8(id, a, b, c), \
-               default: _ulog_dispatch_u8_u16(id, a, b)), \
-            default: _ulog_dispatch_u8_u8_u8(id, a, b, c)), \
-         uint16_t: _Generic((b), \
-            uint8_t: _ulog_dispatch_u16_u8(id, a, b), \
-            uint16_t: _ulog_dispatch_u16_u16(id, a, b), \
-            default: _ulog_dispatch_u16_u8(id, a, b)), \
-         default: _ulog_dispatch_u8_u8_u8(id, a, b, c)); \
+         uint8_t:  _ulog_dispatch_u8(id, a), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)a), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)a), \
+         uint16_t: _ulog_dispatch_u16(id, a), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)a), \
+         uint32_t: _ulog_dispatch_u32(id, a), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)a), \
+         float:    _ulog_dispatch_float(id, a), \
+         double:   _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), \
+         uint8_t:  _ulog_dispatch_u8(id, b), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)b), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)b), \
+         uint16_t: _ulog_dispatch_u16(id, b), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)b), \
+         uint32_t: _ulog_dispatch_u32(id, b), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)b), \
+         float:    _ulog_dispatch_float(id, b), \
+         double:   _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), \
+         uint8_t:  _ulog_dispatch_u8(id, c), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)c), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)c), \
+         uint16_t: _ulog_dispatch_u16(id, c), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)c), \
+         uint32_t: _ulog_dispatch_u32(id, c), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)c), \
+         float:    _ulog_dispatch_float(id, c), \
+         double:   _ulog_dispatch_float(id, (float)c)); \
       _Pragma("GCC diagnostic pop") \
    } while(0)
 
 #define _ULOG_DISPATCH_4(level, fmt, a, b, c, d) \
    do { \
-      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(d) << 24) | (_ULOG_TC(c) << 16) | (_ULOG_TC(b) << 8) | _ULOG_TC(a))); \
-      _ulog_dispatch_u8_u8_u8_u8(id, a, b, c, d); \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
+      _Generic((a), \
+         uint8_t:  _ulog_dispatch_u8(id, a), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)a), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)a), \
+         uint16_t: _ulog_dispatch_u16(id, a), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)a), \
+         uint32_t: _ulog_dispatch_u32(id, a), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)a), \
+         float:    _ulog_dispatch_float(id, a), \
+         double:   _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), \
+         uint8_t:  _ulog_dispatch_u8(id, b), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)b), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)b), \
+         uint16_t: _ulog_dispatch_u16(id, b), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)b), \
+         uint32_t: _ulog_dispatch_u32(id, b), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)b), \
+         float:    _ulog_dispatch_float(id, b), \
+         double:   _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), \
+         uint8_t:  _ulog_dispatch_u8(id, c), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)c), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)c), \
+         uint16_t: _ulog_dispatch_u16(id, c), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)c), \
+         uint32_t: _ulog_dispatch_u32(id, c), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)c), \
+         float:    _ulog_dispatch_float(id, c), \
+         double:   _ulog_dispatch_float(id, (float)c)); \
+      _Generic((d), \
+         uint8_t:  _ulog_dispatch_u8(id, d), \
+         int8_t:   _ulog_dispatch_u8(id, (uint8_t)d), \
+         _Bool:    _ulog_dispatch_u8(id, (uint8_t)d), \
+         uint16_t: _ulog_dispatch_u16(id, d), \
+         int16_t:  _ulog_dispatch_u16(id, (uint16_t)d), \
+         uint32_t: _ulog_dispatch_u32(id, d), \
+         int32_t:  _ulog_dispatch_u32(id, (uint32_t)d), \
+         float:    _ulog_dispatch_float(id, d), \
+         double:   _ulog_dispatch_float(id, (float)d)); \
+      _Pragma("GCC diagnostic pop") \
+   } while(0)
+
+#define _ULOG_DISPATCH_5(level, fmt, a, b, c, d, e) \
+   do { \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
+      _Generic((a), uint8_t: _ulog_dispatch_u8(id, a), int8_t: _ulog_dispatch_u8(id, (uint8_t)a), _Bool: _ulog_dispatch_u8(id, (uint8_t)a), uint16_t: _ulog_dispatch_u16(id, a), int16_t: _ulog_dispatch_u16(id, (uint16_t)a), uint32_t: _ulog_dispatch_u32(id, a), int32_t: _ulog_dispatch_u32(id, (uint32_t)a), float: _ulog_dispatch_float(id, a), double: _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), uint8_t: _ulog_dispatch_u8(id, b), int8_t: _ulog_dispatch_u8(id, (uint8_t)b), _Bool: _ulog_dispatch_u8(id, (uint8_t)b), uint16_t: _ulog_dispatch_u16(id, b), int16_t: _ulog_dispatch_u16(id, (uint16_t)b), uint32_t: _ulog_dispatch_u32(id, b), int32_t: _ulog_dispatch_u32(id, (uint32_t)b), float: _ulog_dispatch_float(id, b), double: _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), uint8_t: _ulog_dispatch_u8(id, c), int8_t: _ulog_dispatch_u8(id, (uint8_t)c), _Bool: _ulog_dispatch_u8(id, (uint8_t)c), uint16_t: _ulog_dispatch_u16(id, c), int16_t: _ulog_dispatch_u16(id, (uint16_t)c), uint32_t: _ulog_dispatch_u32(id, c), int32_t: _ulog_dispatch_u32(id, (uint32_t)c), float: _ulog_dispatch_float(id, c), double: _ulog_dispatch_float(id, (float)c)); \
+      _Generic((d), uint8_t: _ulog_dispatch_u8(id, d), int8_t: _ulog_dispatch_u8(id, (uint8_t)d), _Bool: _ulog_dispatch_u8(id, (uint8_t)d), uint16_t: _ulog_dispatch_u16(id, d), int16_t: _ulog_dispatch_u16(id, (uint16_t)d), uint32_t: _ulog_dispatch_u32(id, d), int32_t: _ulog_dispatch_u32(id, (uint32_t)d), float: _ulog_dispatch_float(id, d), double: _ulog_dispatch_float(id, (float)d)); \
+      _Generic((e), uint8_t: _ulog_dispatch_u8(id, e), int8_t: _ulog_dispatch_u8(id, (uint8_t)e), _Bool: _ulog_dispatch_u8(id, (uint8_t)e), uint16_t: _ulog_dispatch_u16(id, e), int16_t: _ulog_dispatch_u16(id, (uint16_t)e), uint32_t: _ulog_dispatch_u32(id, e), int32_t: _ulog_dispatch_u32(id, (uint32_t)e), float: _ulog_dispatch_float(id, e), double: _ulog_dispatch_float(id, (float)e)); \
+      _Pragma("GCC diagnostic pop") \
+   } while(0)
+
+#define _ULOG_DISPATCH_6(level, fmt, a, b, c, d, e, f) \
+   do { \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
+      _Generic((a), uint8_t: _ulog_dispatch_u8(id, a), int8_t: _ulog_dispatch_u8(id, (uint8_t)a), _Bool: _ulog_dispatch_u8(id, (uint8_t)a), uint16_t: _ulog_dispatch_u16(id, a), int16_t: _ulog_dispatch_u16(id, (uint16_t)a), uint32_t: _ulog_dispatch_u32(id, a), int32_t: _ulog_dispatch_u32(id, (uint32_t)a), float: _ulog_dispatch_float(id, a), double: _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), uint8_t: _ulog_dispatch_u8(id, b), int8_t: _ulog_dispatch_u8(id, (uint8_t)b), _Bool: _ulog_dispatch_u8(id, (uint8_t)b), uint16_t: _ulog_dispatch_u16(id, b), int16_t: _ulog_dispatch_u16(id, (uint16_t)b), uint32_t: _ulog_dispatch_u32(id, b), int32_t: _ulog_dispatch_u32(id, (uint32_t)b), float: _ulog_dispatch_float(id, b), double: _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), uint8_t: _ulog_dispatch_u8(id, c), int8_t: _ulog_dispatch_u8(id, (uint8_t)c), _Bool: _ulog_dispatch_u8(id, (uint8_t)c), uint16_t: _ulog_dispatch_u16(id, c), int16_t: _ulog_dispatch_u16(id, (uint16_t)c), uint32_t: _ulog_dispatch_u32(id, c), int32_t: _ulog_dispatch_u32(id, (uint32_t)c), float: _ulog_dispatch_float(id, c), double: _ulog_dispatch_float(id, (float)c)); \
+      _Generic((d), uint8_t: _ulog_dispatch_u8(id, d), int8_t: _ulog_dispatch_u8(id, (uint8_t)d), _Bool: _ulog_dispatch_u8(id, (uint8_t)d), uint16_t: _ulog_dispatch_u16(id, d), int16_t: _ulog_dispatch_u16(id, (uint16_t)d), uint32_t: _ulog_dispatch_u32(id, d), int32_t: _ulog_dispatch_u32(id, (uint32_t)d), float: _ulog_dispatch_float(id, d), double: _ulog_dispatch_float(id, (float)d)); \
+      _Generic((e), uint8_t: _ulog_dispatch_u8(id, e), int8_t: _ulog_dispatch_u8(id, (uint8_t)e), _Bool: _ulog_dispatch_u8(id, (uint8_t)e), uint16_t: _ulog_dispatch_u16(id, e), int16_t: _ulog_dispatch_u16(id, (uint16_t)e), uint32_t: _ulog_dispatch_u32(id, e), int32_t: _ulog_dispatch_u32(id, (uint32_t)e), float: _ulog_dispatch_float(id, e), double: _ulog_dispatch_float(id, (float)e)); \
+      _Generic((f), uint8_t: _ulog_dispatch_u8(id, f), int8_t: _ulog_dispatch_u8(id, (uint8_t)f), _Bool: _ulog_dispatch_u8(id, (uint8_t)f), uint16_t: _ulog_dispatch_u16(id, f), int16_t: _ulog_dispatch_u16(id, (uint16_t)f), uint32_t: _ulog_dispatch_u32(id, f), int32_t: _ulog_dispatch_u32(id, (uint32_t)f), float: _ulog_dispatch_float(id, f), double: _ulog_dispatch_float(id, (float)f)); \
+      _Pragma("GCC diagnostic pop") \
+   } while(0)
+
+#define _ULOG_DISPATCH_7(level, fmt, a, b, c, d, e, f, g) \
+   do { \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(g) << 24) | (_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
+      _Generic((a), uint8_t: _ulog_dispatch_u8(id, a), int8_t: _ulog_dispatch_u8(id, (uint8_t)a), _Bool: _ulog_dispatch_u8(id, (uint8_t)a), uint16_t: _ulog_dispatch_u16(id, a), int16_t: _ulog_dispatch_u16(id, (uint16_t)a), uint32_t: _ulog_dispatch_u32(id, a), int32_t: _ulog_dispatch_u32(id, (uint32_t)a), float: _ulog_dispatch_float(id, a), double: _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), uint8_t: _ulog_dispatch_u8(id, b), int8_t: _ulog_dispatch_u8(id, (uint8_t)b), _Bool: _ulog_dispatch_u8(id, (uint8_t)b), uint16_t: _ulog_dispatch_u16(id, b), int16_t: _ulog_dispatch_u16(id, (uint16_t)b), uint32_t: _ulog_dispatch_u32(id, b), int32_t: _ulog_dispatch_u32(id, (uint32_t)b), float: _ulog_dispatch_float(id, b), double: _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), uint8_t: _ulog_dispatch_u8(id, c), int8_t: _ulog_dispatch_u8(id, (uint8_t)c), _Bool: _ulog_dispatch_u8(id, (uint8_t)c), uint16_t: _ulog_dispatch_u16(id, c), int16_t: _ulog_dispatch_u16(id, (uint16_t)c), uint32_t: _ulog_dispatch_u32(id, c), int32_t: _ulog_dispatch_u32(id, (uint32_t)c), float: _ulog_dispatch_float(id, c), double: _ulog_dispatch_float(id, (float)c)); \
+      _Generic((d), uint8_t: _ulog_dispatch_u8(id, d), int8_t: _ulog_dispatch_u8(id, (uint8_t)d), _Bool: _ulog_dispatch_u8(id, (uint8_t)d), uint16_t: _ulog_dispatch_u16(id, d), int16_t: _ulog_dispatch_u16(id, (uint16_t)d), uint32_t: _ulog_dispatch_u32(id, d), int32_t: _ulog_dispatch_u32(id, (uint32_t)d), float: _ulog_dispatch_float(id, d), double: _ulog_dispatch_float(id, (float)d)); \
+      _Generic((e), uint8_t: _ulog_dispatch_u8(id, e), int8_t: _ulog_dispatch_u8(id, (uint8_t)e), _Bool: _ulog_dispatch_u8(id, (uint8_t)e), uint16_t: _ulog_dispatch_u16(id, e), int16_t: _ulog_dispatch_u16(id, (uint16_t)e), uint32_t: _ulog_dispatch_u32(id, e), int32_t: _ulog_dispatch_u32(id, (uint32_t)e), float: _ulog_dispatch_float(id, e), double: _ulog_dispatch_float(id, (float)e)); \
+      _Generic((f), uint8_t: _ulog_dispatch_u8(id, f), int8_t: _ulog_dispatch_u8(id, (uint8_t)f), _Bool: _ulog_dispatch_u8(id, (uint8_t)f), uint16_t: _ulog_dispatch_u16(id, f), int16_t: _ulog_dispatch_u16(id, (uint16_t)f), uint32_t: _ulog_dispatch_u32(id, f), int32_t: _ulog_dispatch_u32(id, (uint32_t)f), float: _ulog_dispatch_float(id, f), double: _ulog_dispatch_float(id, (float)f)); \
+      _Generic((g), uint8_t: _ulog_dispatch_u8(id, g), int8_t: _ulog_dispatch_u8(id, (uint8_t)g), _Bool: _ulog_dispatch_u8(id, (uint8_t)g), uint16_t: _ulog_dispatch_u16(id, g), int16_t: _ulog_dispatch_u16(id, (uint16_t)g), uint32_t: _ulog_dispatch_u32(id, g), int32_t: _ulog_dispatch_u32(id, (uint32_t)g), float: _ulog_dispatch_float(id, g), double: _ulog_dispatch_float(id, (float)g)); \
+      _Pragma("GCC diagnostic pop") \
+   } while(0)
+
+#define _ULOG_DISPATCH_8(level, fmt, a, b, c, d, e, f, g, h) \
+   do { \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(h) << 28) | (_ULOG_TC(g) << 24) | (_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
+      _Generic((a), uint8_t: _ulog_dispatch_u8(id, a), int8_t: _ulog_dispatch_u8(id, (uint8_t)a), _Bool: _ulog_dispatch_u8(id, (uint8_t)a), uint16_t: _ulog_dispatch_u16(id, a), int16_t: _ulog_dispatch_u16(id, (uint16_t)a), uint32_t: _ulog_dispatch_u32(id, a), int32_t: _ulog_dispatch_u32(id, (uint32_t)a), float: _ulog_dispatch_float(id, a), double: _ulog_dispatch_float(id, (float)a)); \
+      _Generic((b), uint8_t: _ulog_dispatch_u8(id, b), int8_t: _ulog_dispatch_u8(id, (uint8_t)b), _Bool: _ulog_dispatch_u8(id, (uint8_t)b), uint16_t: _ulog_dispatch_u16(id, b), int16_t: _ulog_dispatch_u16(id, (uint16_t)b), uint32_t: _ulog_dispatch_u32(id, b), int32_t: _ulog_dispatch_u32(id, (uint32_t)b), float: _ulog_dispatch_float(id, b), double: _ulog_dispatch_float(id, (float)b)); \
+      _Generic((c), uint8_t: _ulog_dispatch_u8(id, c), int8_t: _ulog_dispatch_u8(id, (uint8_t)c), _Bool: _ulog_dispatch_u8(id, (uint8_t)c), uint16_t: _ulog_dispatch_u16(id, c), int16_t: _ulog_dispatch_u16(id, (uint16_t)c), uint32_t: _ulog_dispatch_u32(id, c), int32_t: _ulog_dispatch_u32(id, (uint32_t)c), float: _ulog_dispatch_float(id, c), double: _ulog_dispatch_float(id, (float)c)); \
+      _Generic((d), uint8_t: _ulog_dispatch_u8(id, d), int8_t: _ulog_dispatch_u8(id, (uint8_t)d), _Bool: _ulog_dispatch_u8(id, (uint8_t)d), uint16_t: _ulog_dispatch_u16(id, d), int16_t: _ulog_dispatch_u16(id, (uint16_t)d), uint32_t: _ulog_dispatch_u32(id, d), int32_t: _ulog_dispatch_u32(id, (uint32_t)d), float: _ulog_dispatch_float(id, d), double: _ulog_dispatch_float(id, (float)d)); \
+      _Generic((e), uint8_t: _ulog_dispatch_u8(id, e), int8_t: _ulog_dispatch_u8(id, (uint8_t)e), _Bool: _ulog_dispatch_u8(id, (uint8_t)e), uint16_t: _ulog_dispatch_u16(id, e), int16_t: _ulog_dispatch_u16(id, (uint16_t)e), uint32_t: _ulog_dispatch_u32(id, e), int32_t: _ulog_dispatch_u32(id, (uint32_t)e), float: _ulog_dispatch_float(id, e), double: _ulog_dispatch_float(id, (float)e)); \
+      _Generic((f), uint8_t: _ulog_dispatch_u8(id, f), int8_t: _ulog_dispatch_u8(id, (uint8_t)f), _Bool: _ulog_dispatch_u8(id, (uint8_t)f), uint16_t: _ulog_dispatch_u16(id, f), int16_t: _ulog_dispatch_u16(id, (uint16_t)f), uint32_t: _ulog_dispatch_u32(id, f), int32_t: _ulog_dispatch_u32(id, (uint32_t)f), float: _ulog_dispatch_float(id, f), double: _ulog_dispatch_float(id, (float)f)); \
+      _Generic((g), uint8_t: _ulog_dispatch_u8(id, g), int8_t: _ulog_dispatch_u8(id, (uint8_t)g), _Bool: _ulog_dispatch_u8(id, (uint8_t)g), uint16_t: _ulog_dispatch_u16(id, g), int16_t: _ulog_dispatch_u16(id, (uint16_t)g), uint32_t: _ulog_dispatch_u32(id, g), int32_t: _ulog_dispatch_u32(id, (uint32_t)g), float: _ulog_dispatch_float(id, g), double: _ulog_dispatch_float(id, (float)g)); \
+      _Generic((h), uint8_t: _ulog_dispatch_u8(id, h), int8_t: _ulog_dispatch_u8(id, (uint8_t)h), _Bool: _ulog_dispatch_u8(id, (uint8_t)h), uint16_t: _ulog_dispatch_u16(id, h), int16_t: _ulog_dispatch_u16(id, (uint16_t)h), uint32_t: _ulog_dispatch_u32(id, h), int32_t: _ulog_dispatch_u32(id, (uint32_t)h), float: _ulog_dispatch_float(id, h), double: _ulog_dispatch_float(id, (float)h)); \
+      _Pragma("GCC diagnostic pop") \
    } while(0)
 
 // Support macros to expand ... into actual dispatcher based on argument count
 // NOTE: Requires ##__VA_ARGS__ GNU extension for zero-argument support.
 // Use -std=gnu11 or compiler default, not -std=c11
-#define _ULOG_GET_ARG_COUNT(...) _ULOG_GET_ARG_COUNT_IMPL(0, ##__VA_ARGS__, 4, 3, 2, 1, 0)
-#define _ULOG_GET_ARG_COUNT_IMPL(dummy, _1, _2, _3, _4, N, ...) N
+#define _ULOG_GET_ARG_COUNT(...) _ULOG_GET_ARG_COUNT_IMPL(0, ##__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define _ULOG_GET_ARG_COUNT_IMPL(dummy, _1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #define _ULOG_DISPATCH(n) _ULOG_DISPATCH_IMPL(n)
 #define _ULOG_DISPATCH_IMPL(n) _ULOG_DISPATCH_##n
 
@@ -389,9 +503,10 @@ namespace ulog {
 
       template<typename... Ts>
       constexpr uint32_t encode_traits() {
+         static_assert(sizeof...(Ts) <= 8, "ULOG supports up to 8 arguments");
          uint32_t result = 0;
          uint8_t i = 0;
-         ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 8)), ...);
+         ((result |= static_cast<uint32_t>(arg_trait<Ts>()) << (i++ * 4)), ...);
          return result;
       }
 
@@ -430,14 +545,6 @@ namespace ulog {
             } conv = { value };
 
             return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
-         } else if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*>) {
-            // We could read beyond the string - but that's OK, the display will fix it for us
-            return std::make_tuple(
-               static_cast<uint8_t>(value[0]),
-               static_cast<uint8_t>(value[1]),
-               static_cast<uint8_t>(value[2]),
-               static_cast<uint8_t>(value[3])
-            );
          } else {
             static_assert(sizeof(U) == 0, "Unsupported type for packing");
          }
@@ -493,60 +600,53 @@ namespace ulog {
             }
          }
       }
+
+      // Helper to emit a single argument as a dedicated packet
+      template <typename IdType, typename T>
+      inline void emit_single_arg(IdType id, T&& arg) {
+         using U = std::remove_cv_t<std::remove_reference_t<T>>;
+
+         // Check for string types: const char*, char*, or char arrays
+         if constexpr (std::is_same_v<U, const char*> || std::is_same_v<U, char*> ||
+                       (std::is_array_v<U> && std::is_same_v<std::remove_extent_t<U>, char>) ||
+                       (std::is_array_v<U> && std::is_same_v<std::remove_extent_t<U>, const char>)) {
+            // String handling
+            const char* str = arg;
+            send_string_chunks(id, str);
+         } else {
+            // Non-string handling - pack to bytes and send
+            auto values = split_to_u8_tuple(std::forward<T>(arg));
+            constexpr size_t nbytes = std::tuple_size<decltype(values)>::value;
+
+            if constexpr (nbytes == 1) {
+               ulog_detail_enqueue_1(id, std::get<0>(values));
+            } else if constexpr (nbytes == 2) {
+               ulog_detail_enqueue_2(id, std::get<0>(values), std::get<1>(values));
+            } else if constexpr (nbytes == 4) {
+               ulog_detail_enqueue_4(id, std::get<0>(values), std::get<1>(values), 
+                                     std::get<2>(values), std::get<3>(values));
+            }
+         }
+      }
    } // namespace detail
 } // namespace ulog
 
 #define ULOG(level, fmt, ...)                                                 \
 do {                                                                          \
    [&]<typename... Args>(Args&&... args) {                                    \
-      /* Check if any argument is a string pointer or char array */           \
-      constexpr bool has_string = (... || (                                   \
-         std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, const char*> || \
-         std::is_same_v<std::remove_cv_t<std::remove_reference_t<Args>>, char*> || \
-         (std::is_array_v<std::remove_reference_t<Args>> &&                   \
-          std::is_same_v<std::remove_cv_t<std::remove_extent_t<std::remove_reference_t<Args>>>, char>))); \
-      if constexpr (has_string) {                                             \
-         constexpr size_t nargs = sizeof...(Args);                            \
-         static_assert(nargs == 1, "ULOG with strings supports only one string argument"); \
-         auto process_string = [](auto&& arg) {                               \
-            _ULOG_EMIT_RECORD(level, fmt, ULOG_TRAIT_ID_STR);                 \
-            const char* str = arg;                                            \
-            if (not str or std::strlen(str) == 0) {                           \
-               ulog_detail_enqueue(id);                                       \
-            } else {                                                          \
-               ::ulog::detail::send_string_chunks(id, str);                   \
-            }                                                                 \
-         };                                                                   \
-         (process_string(args), ...);                                         \
+      constexpr size_t nargs = sizeof...(Args);                               \
+      static_assert(nargs <= 8, "ULOG supports up to 8 arguments");           \
+      /* Encode all argument traits into a single 32-bit value (4 bits each) */ \
+      constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
+      (void)_typecode; /* suppress unused warning when inlined as constant */ \
+      /* Emit one record with the typecode */                                 \
+      _ULOG_EMIT_RECORD(level, fmt, _typecode);                               \
+      if constexpr (nargs == 0) {                                             \
+         /* No arguments - emit empty record */                               \
+         ulog_detail_enqueue(id);                                             \
       } else {                                                                \
-         /* Original non-string handling */                                   \
-         constexpr uint32_t _typecode = ::ulog::detail::encode_traits<Args...>();\
-         (void)_typecode; /* suppress unused warning when inlined as constant */ \
-         auto values = ::ulog::detail::pack_bytes_to_tuple(args...);         \
-         constexpr size_t _nbytes = std::tuple_size<decltype(values)>::value; \
-         static_assert(_nbytes <= 4, "ULOG supports up to 4 bytes of payload"); \
-         _ULOG_EMIT_RECORD(level, fmt, _typecode);                            \
-         if constexpr (_nbytes == 0) {                                        \
-            ulog_detail_enqueue(id);                                          \
-         } else if constexpr (_nbytes == 1) {                                 \
-            auto&& b0 = std::get<0>(values);                                  \
-            ulog_detail_enqueue_1(id, b0);                                    \
-         } else if constexpr (_nbytes == 2) {                                 \
-            auto&& b0 = std::get<0>(values);                                  \
-            auto&& b1 = std::get<1>(values);                                  \
-            ulog_detail_enqueue_2(id, b0, b1);                                \
-         } else if constexpr (_nbytes == 3) {                                 \
-            auto&& b0 = std::get<0>(values);                                  \
-            auto&& b1 = std::get<1>(values);                                  \
-            auto&& b2 = std::get<2>(values);                                  \
-            ulog_detail_enqueue_3(id, b0, b1, b2);                            \
-         } else if constexpr (_nbytes == 4) {                                 \
-            auto&& b0 = std::get<0>(values);                                  \
-            auto&& b1 = std::get<1>(values);                                  \
-            auto&& b2 = std::get<2>(values);                                  \
-            auto&& b3 = std::get<3>(values);                                  \
-            ulog_detail_enqueue_4(id, b0, b1, b2, b3);                        \
-         }                                                                    \
+         /* Emit each argument as a separate packet */                        \
+         (::ulog::detail::emit_single_arg(id, std::forward<Args>(args)), ...); \
       }                                                                       \
    }(__VA_ARGS__);                                                            \
 } while(0)

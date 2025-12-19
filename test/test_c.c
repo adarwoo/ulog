@@ -27,7 +27,7 @@ void test_log_in_c_function() {
     ULOG_INFO("float", f);
     
     // 2 args - various combinations
-    ULOG_INFO("u8,u8", u8, u8);
+    ULOG_INFO("bool,u8", b, u8);
     ULOG_INFO("u8,u16", u8, u16);
     ULOG_INFO("u16,u8", u16, u8);
     ULOG_INFO("u16,u16", u16, u16);
@@ -42,4 +42,6 @@ void test_log_in_c_function() {
     
     // 4 args - only u8 types fit
     ULOG_INFO("u8,u8,u8,u8", u8, u8, u8, u8);
+    ULOG_INFO("u8,u8,u8,b", u8, u8, u8, b);
+    ULOG_INFO("u8,b,u8,b", u8, b, u8, b);
 }
