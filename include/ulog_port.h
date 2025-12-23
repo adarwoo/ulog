@@ -25,7 +25,7 @@ void _ulog_init();
 // ---------------------------------------------------------------------------
 #undef _ULOG_LOAD_ID
 
-#ifdef __avr__
+#ifdef __AVR__
    #define _ULOG_LOAD_ID "ldi %0, hi8(1b)"
 #elif defined(__x86_64__) || defined(__amd64__)
    // x86-64 optimization: Use RIP-relative addressing for direct pointer computation
@@ -41,7 +41,7 @@ void _ulog_init();
       uintptr_t base = (uintptr_t)__ulog_logs_start;
       uintptr_t addr = (uintptr_t)p;
       return (uint8_t)(((addr - base) >> 8) & 0xFF);
-   }   
+   }
 #elif defined(__arm__) && !defined(__aarch64__)
    // ARM32 optimization: Use PC-relative addressing for direct pointer computation
    // Similar to x86-64 but uses ARM's PC-relative addressing
@@ -60,7 +60,7 @@ void _ulog_init();
 #endif
 
 #ifndef _ULOG_EMIT_RECORD_PROLOGUE
-   #define _ULOG_EMIT_RECORD_PROLOGUE const uint8_t _ulog_index
+   #define _ULOG_EMIT_RECORD_PROLOGUE uint8_t _ulog_index
 #endif
 
 #ifndef _ULOG_EMIT_RECORD_EPILOGUE
@@ -69,7 +69,7 @@ void _ulog_init();
 
 // Check for the framework/scheduler being used
 #if defined(USE_ASX) || defined(__ASX__)
-   #include "ulog_avr_asx_gnu.h"
+   #include "ulog_asx_gnu.h"
 #elif defined(__linux__)
 #  include "ulog_linux_gnu.h"
 #elif defined(FREERTOS)
@@ -87,7 +87,7 @@ void _ulog_init();
  * Only the high byte (bits 8-15) of the label address is needed for the ID.
  * Each invocation gets a unique local label (1:) which is guaranteed unique
  * per inline asm block by the assembler.
- * 
+ *
  * NOTE: .logs section is metadata-only (parsed from ELF by host tools),
  * so it uses NO "a" flag to prevent it from being counted in device memory.
  */
