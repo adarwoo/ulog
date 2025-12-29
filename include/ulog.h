@@ -105,24 +105,24 @@ void ulog_flush(void);
 
 /**
  * Emit a log record directly into the .logs section using inline assembly.
- * 
+ *
  * This generic implementation creates .logs section entries but DOES NOT
  * provide a way to get the record address portably. Each platform MUST
  * override this macro with architecture-specific address computation.
- * 
+ *
  * Platform implementations:
  * - x86-64: Uses RIP-relative LEA (see ulog_linux_gnu.h)
- * - AVR: Uses LPM/LDS with program memory addressing (see ulog_avr_asx_gnu.h)  
+ * - AVR: Uses LPM/LDS with program memory addressing (see ulog_avr_asx_gnu.h)
  * - ARM: Uses PC-relative addressing
- * 
+ *
  * Layout (256 bytes total):
  * - Byte 0: level (1 byte)
  * - Bytes 1-4: line number (4 bytes)
  * - Bytes 5-8: typecode (4 bytes)
  * - Bytes 9+: file path (null-terminated, packed)
  * - Next: format string (null-terminated, packed immediately after file)
- * 
- * IMPORTANT: 
+ *
+ * IMPORTANT:
  * - Format strings containing % must escape them as %% (inline assembly)
  * - .logs section has NO "a" flag (not allocatable) - it's metadata only
  */
@@ -564,7 +564,7 @@ namespace ulog {
       template <typename IdType>
       inline void send_string_chunks(IdType id, const char* str) {
          size_t pos = 0;
-         
+
          while (true) {
             uint8_t b0 = str[pos];
             if ( b0 == 0 ) {
@@ -593,7 +593,7 @@ namespace ulog {
                   ulog_detail_enqueue_4(id, uint8_t{'.'}, uint8_t{'.'}, uint8_t{'.'}, uint8_t{0});
                   break;
                }
-               
+
                ulog_detail_enqueue_4(id, b0, b1, b2, b3);
 
                pos += 4;
@@ -623,7 +623,7 @@ namespace ulog {
             } else if constexpr (nbytes == 2) {
                ulog_detail_enqueue_2(id, std::get<0>(values), std::get<1>(values));
             } else if constexpr (nbytes == 4) {
-               ulog_detail_enqueue_4(id, std::get<0>(values), std::get<1>(values), 
+               ulog_detail_enqueue_4(id, std::get<0>(values), std::get<1>(values),
                                      std::get<2>(values), std::get<3>(values));
             }
          }
@@ -654,8 +654,16 @@ do {                                                                          \
 #endif // End of the C-only section
 
 // Include the project trace config (unless passed on the command line)
-#if defined HAS_ULOG_CONFIG_FILE && !defined ULOG_LEVEL
-#  include "conf_ulog.h"
+
+#ifndef ULOG_LEVEL
+   // Convention-based fallback - __has_include is supported by clang and gcc
+#  if defined __has_include
+#     if __has_include("conf_ulog.h")
+#        include "conf_ulog.h"
+#     endif
+#  elif defined ULOG_CONFIG_FILE
+#    include ULOG_CONFIG_FILE
+#  endif
 #endif
 
 // Default log level if not defined yet
