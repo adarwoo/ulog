@@ -625,6 +625,8 @@ namespace ulog {
             } else if constexpr (nbytes == 4) {
                ulog_detail_enqueue_4(id, std::get<0>(values), std::get<1>(values),
                                      std::get<2>(values), std::get<3>(values));
+            } else {
+               static_assert(nbytes == 0, "Unsupported packed size");
             }
          }
       }

@@ -13,7 +13,7 @@ extern "C" {
 // Private prototypes used by the ULOG framework
 // ---------------------------------------------------------------------------
 
-void _ulog_on_transmit();
+void _ulog_transmit();
 void _ulog_init();
 
 #ifdef __cplusplus
@@ -98,7 +98,7 @@ void _ulog_init();
       ".pushsection .logs,\"\",@progbits\n\t"                         \
       ".balign 256\n\t"                                               \
       "1:\n\t"                                                        \
-      ".byte %c1\n\t"                                                 \
+      ".long %c1\n\t"                                                 \
       ".long %c2\n\t"                                                 \
       ".long %c3\n\t"                                                 \
       ".asciz \"" __FILE__ "\"\n\t"                                   \
@@ -106,7 +106,7 @@ void _ulog_init();
       ".popsection\n\t"                                               \
       _ULOG_LOAD_ID"\n\t"                                             \
       : "=r" (_ulog_index)                                            \
-      : "i" ((uint8_t)(level)),                                       \
+      : "i" ((uint32_t)(level)),                                      \
         "i" ((uint32_t)(__LINE__)),                                   \
         "i" ((uint32_t)(typecode))                                    \
    );                                                                 \

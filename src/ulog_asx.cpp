@@ -35,8 +35,6 @@ namespace {
       >
    >;
 
-   void _ulog_on_transmit() {}
-
    /**
     * Initialize the ULOG system
     * The logging can start before this is called, but no data will be sent
@@ -48,7 +46,7 @@ namespace {
       uart::get().CTRLA = 0; // No interrupt at this stage
 
       // Register a reactor for initiating transmissions
-      _ulog_asx_react_to_initiate_transmit = asx::reactor::bind(_ulog_on_transmit, reactor_prio_low);
+      _ulog_asx_react_to_initiate_transmit = asx::reactor::bind(_ulog_transmit, reactor_prio_low);
 
       // Kickstart the first transmission if data is available
       uart::react_on_send_complete(_ulog_asx_react_to_initiate_transmit);
@@ -57,5 +55,9 @@ namespace {
     extern "C" void _ulog_asx_send_data(const uint8_t *data, size_t len) {
         uart::send(std::span<const uint8_t>(data, len));
     }
+
+   extern "C" bool _ulog_asx_tx_ready() {
+      return uart::tx_ready();
+   }
 }
 
