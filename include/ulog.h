@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file ulog.h
- * @brief C-compatible Ultra-lightweight logging framework for embedded systems.
+ * @brief C/C++ Ultra-lightweight logging framework for embedded systems.
  *
  * This header defines a compile-time evaluated logging system designed for
  * memory-constrained embedded environments. It embeds log metadata into custom
@@ -10,18 +10,16 @@
  * compile time and can be indexed offline using the binary metadata.
  *
  * Features:
- * - Zero runtime format string overhead
+ * - Zero runtime format overhead (all data are sent as raw binary packets)
  * - Compile-time argument encoding and dispatch
  * - Interrupt compatible
- * - Each argument sent as a dedicated packet (no size limit per argument)
- * - Auto-tagged log level and type signature (4-bit traits)
  * - Supports up to 8 arguments per log call
  * - Inline assembly generates .logs metadata per callsite
- * - Messages are sent over a UART using COBS encoding
- * - 16-bit log ID with MSB used as continuation flag
+ * - Messages are sent as binary packets using COBS encoding
+ * - Up to 32760 unique messages per application
  *
  * Usage:
- * ```c
+ * ```c/c++
  * #include "ulog.h"
  *
  * // Simple log, no args
@@ -38,11 +36,8 @@
  * ULOG_INFO("Temp: {.<4f}", temperature);
  * ```
  *
- * @note Only up to 8 arguments are supported per log. Each argument is sent as a separate packet.
- * @note For multi-argument logs, all packets except the last have bit 15 (MSB) set as continuation flag.
- * @note Format strings must be literals.
+ * @note The C implementation relies on C11 _Generic for type dispatching. The C++ version uses templates.
  * @note The `.logs` section can be parsed from the ELF to map runtime packets back to messages.
- * @note You are limited to 32765 messages per application (16-bit ID space, with MSB for continuation).
  * @note This header is C and C++ compatible, each language use an optimized version - more type safe for C++
  * @note This header requires C11 or later for _Generic support and C++17 or later for template features.
  * @note For zero-argument logging (e.g., ULOG_INFO("text")), use -std=gnu11 or compiler default, not -std=c11

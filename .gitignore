@@ -43,7 +43,9 @@ test/*.ii
 test/*.i
 test/*.s
 test/test_link
+test/test
 src/*.ii
 src/*.i
 src/*.s
-src/test
+
+
