@@ -27,21 +27,21 @@ void _ulog_init();
 
 #ifdef __AVR__
    #define _ULOG_LOAD_ID "ldi %0, hi8(1b)"
-   #define _ULOG_EMIT_RECORD_PROLOGUE register uint8_t _ulog_index __asm__ ("r24")
+   #define _ULOG_EMIT_RECORD_PROLOGUE register uint16_t _ulog_index __asm__ ("r24")
 #elif defined(__x86_64__) || defined(__amd64__)
    // x86-64 optimization: Use RIP-relative addressing for direct pointer computation
    // This avoids the extern reference and is more efficient on x86-64 PIE/ASLR systems
    // NOTE: .logs has NO "a" flag - it's metadata only, not loaded at runtime
    #define _ULOG_EMIT_RECORD_PROLOGUE const void *_ulog_index
    #define _ULOG_LOAD_ID "leaq 1b(%%rip), %0"
-   #define _ULOG_EMIT_RECORD_EPILOGUE uint8_t id = ulog_id_rel(_ulog_index)
+   #define _ULOG_EMIT_RECORD_EPILOGUE uint16_t id = ulog_id_rel(_ulog_index)
 
    // x86-64 uses subtraction-based ID computation (supports PIE/ASLR)
-   static inline uint8_t ulog_id_rel(const void *p) {
+   static inline uint16_t ulog_id_rel(const void *p) {
       extern const unsigned char __ulog_logs_start[];
       uintptr_t base = (uintptr_t)__ulog_logs_start;
       uintptr_t addr = (uintptr_t)p;
-      return (uint8_t)(((addr - base) >> 8) & 0xFF);
+      return (uint16_t)((addr - base) >> 8);
    }
 #elif defined(__arm__) && !defined(__aarch64__)
    // ARM32 optimization: Use PC-relative addressing for direct pointer computation
@@ -61,11 +61,11 @@ void _ulog_init();
 #endif
 
 #ifndef _ULOG_EMIT_RECORD_PROLOGUE
-   #define _ULOG_EMIT_RECORD_PROLOGUE uint8_t _ulog_index
+   #define _ULOG_EMIT_RECORD_PROLOGUE uint16_t _ulog_index
 #endif
 
 #ifndef _ULOG_EMIT_RECORD_EPILOGUE
-   #define _ULOG_EMIT_RECORD_EPILOGUE uint8_t id = _ulog_index
+   #define _ULOG_EMIT_RECORD_EPILOGUE uint16_t id = _ulog_index
 #endif
 
 // Check for the framework/scheduler being used

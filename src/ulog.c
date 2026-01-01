@@ -17,13 +17,16 @@
 #define COBS_EOF 0xA6
 
 /** Special ID for application start */
-#define ULOG_ID_START 0xFE
+#define ULOG_ID_START 0xFFFE
+
+/** Continuation flag - MSB of 16-bit ID */
+#define ULOG_ID_CONTINUATION 0x8000
 
 // Circular buffer (stubbed here)
 #define MAX_PAYLOAD 4
 
 #ifndef ULOG_ID_TYPE
-#  define ULOG_ID_TYPE uint8_t
+#  define ULOG_ID_TYPE uint16_t
 #endif
 
 // ----------------------------------------------------------------------
@@ -35,13 +38,13 @@ typedef struct {
 
     union {
         struct {
-            // Id of the log message
+            // Id of the log message (16-bit)
             ULOG_ID_TYPE id;
             // Data to send over
             uint8_t data[MAX_PAYLOAD];
         };
 
-        uint8_t payload[1 + MAX_PAYLOAD];
+        uint8_t payload[2 + MAX_PAYLOAD];
     };
 } LogPacket;
 
@@ -59,7 +62,7 @@ LogPacket logs_circular_buffer[ULOG_QUEUE_SIZE];
 // The payload(COBS adds +2 overhead worse case)
 // Pre-fill with the encoded application start frame
 static uint8_t tx_encoded[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2] =
-   {0x02, ULOG_ID_START, COBS_EOF};
+   {0x03, (uint8_t)(ULOG_ID_START & 0xFF), (uint8_t)(ULOG_ID_START >> 8), COBS_EOF};
 
 // Flag to indicate a buffer overrun masked into the trait of the log
 // This is a simple way to indicate that some logs were lost
@@ -183,7 +186,7 @@ void _ulog_transmit() {
  * Internal init function to be called by the porting layer
  */
 void _ulog_init() {
-   _ULOG_PORT_SEND_DATA(tx_encoded, 3); // Send the application start frame
+   _ULOG_PORT_SEND_DATA(tx_encoded, 4); // Send the application start frame (3 bytes + EOF)
 }
 
 
@@ -192,21 +195,21 @@ void _ulog_init() {
 // Let the compiler optimize the obvious factorization
 // ----------------------------------------------------------------------
 
-void ulog_detail_enqueue(uint8_t id) {
+void ulog_detail_enqueue(uint16_t id) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
       dst->id = id;
-      dst->payload_len = 1+0;
+      dst->payload_len = 2+0;
    }
 }
 
-void ulog_detail_enqueue_1(uint8_t id, uint8_t v0) {
+void ulog_detail_enqueue_1(uint16_t id, uint8_t v0) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
       dst->id = id;
-      dst->payload_len = 1+1;
+      dst->payload_len = 2+1;
       dst->data[0] = v0;
 
       // Notify that data is available so a transmission can be initiated
@@ -215,12 +218,12 @@ void ulog_detail_enqueue_1(uint8_t id, uint8_t v0) {
    }
 }
 
-void ulog_detail_enqueue_2(uint8_t id, uint8_t v0, uint8_t v1) {
+void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
       dst->id = id;
-      dst->payload_len = 1+2;
+      dst->payload_len = 2+2;
       dst->data[0] = v0;
       dst->data[1] = v1;
 
@@ -230,16 +233,16 @@ void ulog_detail_enqueue_2(uint8_t id, uint8_t v0, uint8_t v1) {
    }
 }
 
-void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
+void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
       dst->id = id;
-      dst->payload_len = 1+3;
+      dst->payload_len = 2+3;
       dst->data[0] = v0;
       dst->data[1] = v1;
       dst->data[2] = v2;
-      
+
       // Notify that data is available so a transmission can be initiated
       // This function must be callable from an interrupt context
       _ULOG_PORT_NOTIFY();
@@ -247,12 +250,12 @@ void ulog_detail_enqueue_3(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
    }
 }
 
-void ulog_detail_enqueue_4(uint8_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3) {
+void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
       dst->id = id;
-      dst->payload_len = 1+4;
+      dst->payload_len = 2+4;
       dst->data[0] = v0;
       dst->data[1] = v1;
       dst->data[2] = v2;
@@ -274,6 +277,6 @@ void ulog_flush(void) {
       _ulog_transmit();
       _ULOG_PORT_ENTER_CRITICAL_SECTION();
    }
-   
+
    _ULOG_PORT_EXIT_CRITICAL_SECTION();
 }
