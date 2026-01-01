@@ -41,9 +41,8 @@ typedef struct {
 
     union {
         struct {
-            // Id of the log message (16-bit, stored in big-endian)
-            uint8_t id_msb;
-            uint8_t id_lsb;
+            // Id of the log message (16-bit, stored in native endianness)
+            uint16_t id;
             // Data to send over
             uint8_t data[MAX_PAYLOAD];
         };
@@ -172,10 +171,9 @@ void _ulog_transmit() {
          _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
       } else if (buffer_overrun > 0) {
          struct {
-            uint8_t id_msb;
-            uint8_t id_lsb;
+            uint16_t id;
             uint8_t count;
-         } overrun_payload = {(uint8_t)(ULOG_ID_OVERRUN >> 8), (uint8_t)(ULOG_ID_OVERRUN & 0xFF), 0};
+         } overrun_payload = {ULOG_ID_OVERRUN, 0};
 
          uint8_t encoded_len = cobs_encode((const uint8_t*)&overrun_payload, sizeof(overrun_payload));
 
@@ -208,8 +206,7 @@ void ulog_detail_enqueue(uint16_t id) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
-      dst->id_msb = (uint8_t)(id >> 8);
-      dst->id_lsb = (uint8_t)(id & 0xFF);
+      dst->id = id;
       dst->payload_len = 2+0;
    }
 }
@@ -218,8 +215,7 @@ void ulog_detail_enqueue_1(uint16_t id, uint8_t v0) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
-      dst->id_msb = (uint8_t)(id >> 8);
-      dst->id_lsb = (uint8_t)(id & 0xFF);
+      dst->id = id;
       dst->payload_len = 2+1;
       dst->data[0] = v0;
 
@@ -233,8 +229,7 @@ void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
-      dst->id_msb = (uint8_t)(id >> 8);
-      dst->id_lsb = (uint8_t)(id & 0xFF);
+      dst->id = id;
       dst->payload_len = 2+2;
       dst->data[0] = v0;
       dst->data[1] = v1;
@@ -249,8 +244,7 @@ void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
-      dst->id_msb = (uint8_t)(id >> 8);
-      dst->id_lsb = (uint8_t)(id & 0xFF);
+      dst->id = id;
       dst->payload_len = 2+3;
       dst->data[0] = v0;
       dst->data[1] = v1;
@@ -259,7 +253,6 @@ void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
       // Notify that data is available so a transmission can be initiated
       // This function must be callable from an interrupt context
       _ULOG_PORT_NOTIFY();
-
    }
 }
 
@@ -267,8 +260,7 @@ void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint
    LogPacket* dst = reserve_log_packet();
 
    if (dst) {
-      dst->id_msb = (uint8_t)(id >> 8);
-      dst->id_lsb = (uint8_t)(id & 0xFF);
+      dst->id = id;
       dst->payload_len = 2+4;
       dst->data[0] = v0;
       dst->data[1] = v1;
@@ -278,7 +270,6 @@ void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint
       // Notify that data is available so a transmission can be initiated
       // This function must be callable from an interrupt context
       _ULOG_PORT_NOTIFY();
-
    }
 }
 

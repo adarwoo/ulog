@@ -148,6 +148,8 @@ void ulog_flush(void);
 
 // ----------------------------------------------------------------------------
 // inline helpers to enqueue all possible combinations based on the number and types
+// Note: The data is sent using the CPU's native endianness. The viewer must handle this.
+// The rationale is that .logs section is generated on the same platform, so endianness is known.
 // ----------------------------------------------------------------------------
 static inline void _ulog_dispatch(uint16_t id) {
     ulog_detail_enqueue(id);
@@ -158,16 +160,18 @@ static inline void _ulog_dispatch_u8(uint16_t id, uint8_t a) {
 }
 
 static inline void _ulog_dispatch_u16(uint16_t id, uint16_t a) {
-    ulog_detail_enqueue_2(id, (uint8_t)(a >> 8), (uint8_t)(a));
+    union { uint16_t u; uint8_t bytes[2]; } conv = { .u = a };
+    ulog_detail_enqueue_2(id, conv.bytes[0], conv.bytes[1]);
 }
 
 static inline void _ulog_dispatch_u32(uint16_t id, uint32_t a) {
-    ulog_detail_enqueue_4(id, (uint8_t)(a >> 24), (uint8_t)(a >> 16), (uint8_t)(a >> 8), (uint8_t)(a));
+    union { uint32_t u; uint8_t bytes[4]; } conv = { .u = a };
+    ulog_detail_enqueue_4(id, conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
 }
 
 static inline void _ulog_dispatch_float(uint16_t id, float a) {
-    union { float f; uint32_t u; } conv = { .f = a };
-    ulog_detail_enqueue_4(id, (uint8_t)(conv.u >> 24), (uint8_t)(conv.u >> 16), (uint8_t)(conv.u >> 8), (uint8_t)(conv.u));
+    union { float f; uint8_t bytes[4]; } conv = { .f = a };
+    ulog_detail_enqueue_4(id, conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
 }
 
 // ============================================================================
@@ -410,17 +414,19 @@ namespace ulog {
             if constexpr (sizeof(T) == 1) {
                return std::make_tuple(static_cast<uint8_t>(value));
             } else if constexpr (sizeof(T) == 2) {
-               return std::make_tuple(
-                     static_cast<uint8_t>(value & 0xFF),
-                     static_cast<uint8_t>((value >> 8) & 0xFF)
-               );
+               // Use native byte order
+               union {
+                  uint16_t u;
+                  uint8_t bytes[2];
+               } conv = { static_cast<uint16_t>(value) };
+               return std::make_tuple(conv.bytes[0], conv.bytes[1]);
             } else if constexpr (sizeof(T) == 4) {
-               return std::make_tuple(
-                     static_cast<uint8_t>(value & 0xFF),
-                     static_cast<uint8_t>((value >> 8) & 0xFF),
-                     static_cast<uint8_t>((value >> 16) & 0xFF),
-                     static_cast<uint8_t>((value >> 24) & 0xFF)
-               );
+               // Use native byte order
+               union {
+                  uint32_t u;
+                  uint8_t bytes[4];
+               } conv = { static_cast<uint32_t>(value) };
+               return std::make_tuple(conv.bytes[0], conv.bytes[1], conv.bytes[2], conv.bytes[3]);
             } else {
                static_assert(sizeof(T) == 0, "Unsupported integer size");
             }
