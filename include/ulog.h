@@ -158,16 +158,16 @@ static inline void _ulog_dispatch_u8(uint16_t id, uint8_t a) {
 }
 
 static inline void _ulog_dispatch_u16(uint16_t id, uint16_t a) {
-    ulog_detail_enqueue_2(id, (uint8_t)(a), (uint8_t)(a >> 8));
+    ulog_detail_enqueue_2(id, (uint8_t)(a >> 8), (uint8_t)(a));
 }
 
 static inline void _ulog_dispatch_u32(uint16_t id, uint32_t a) {
-    ulog_detail_enqueue_4(id, (uint8_t)(a), (uint8_t)(a >> 8), (uint8_t)(a >> 16), (uint8_t)(a >> 24));
+    ulog_detail_enqueue_4(id, (uint8_t)(a >> 24), (uint8_t)(a >> 16), (uint8_t)(a >> 8), (uint8_t)(a));
 }
 
 static inline void _ulog_dispatch_float(uint16_t id, float a) {
     union { float f; uint32_t u; } conv = { .f = a };
-    ulog_detail_enqueue_4(id, (uint8_t)(conv.u), (uint8_t)(conv.u >> 8), (uint8_t)(conv.u >> 16), (uint8_t)(conv.u >> 24));
+    ulog_detail_enqueue_4(id, (uint8_t)(conv.u >> 24), (uint8_t)(conv.u >> 16), (uint8_t)(conv.u >> 8), (uint8_t)(conv.u));
 }
 
 // ============================================================================
