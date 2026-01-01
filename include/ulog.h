@@ -205,6 +205,21 @@ static inline void _ulog_dispatch_float(uint16_t id, float a) {
 // This relies on compiler support for C11 _Generic. The final resolution happens
 // at compile time, so there is no runtime overhead.
 // ============================================================================
+
+// Helper macros for GCC-only pragma directives (for portability)
+#ifdef __GNUC__
+#  define _ULOG_DIAG_PUSH() \
+      _Pragma("GCC diagnostic push") \
+      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
+      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"")
+#  define _ULOG_DIAG_POP() \
+      _Pragma("GCC diagnostic pop")
+#else
+#  define _ULOG_DIAG_PUSH()
+#  define _ULOG_DIAG_POP()
+#endif
+
 #define _ULOG_DISPATCH_GENERIC(a, flag) \
    _Generic((a), \
       uint8_t:  _ulog_dispatch_u8(id | flag, a), \
@@ -225,76 +240,58 @@ static inline void _ulog_dispatch_float(uint16_t id, float a) {
 
 #define _ULOG_DISPATCH_1(level, fmt, a) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, _ULOG_TC(a)); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 
 #define _ULOG_DISPATCH_2(level, fmt, a, b) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_3(level, fmt, a, b, c) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(c, ULOG_ID_CONTINUATION) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_4(level, fmt, a, b, c, d) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(c, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(d, ULOG_ID_CONTINUATION) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_5(level, fmt, a, b, c, d, e) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(c, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(d, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(e, ULOG_ID_CONTINUATION) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_6(level, fmt, a, b, c, d, e, f) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
@@ -302,15 +299,12 @@ static inline void _ulog_dispatch_float(uint16_t id, float a) {
       _ULOG_DISPATCH_GENERIC(d, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(e, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(f, ULOG_ID_CONTINUATION) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_7(level, fmt, a, b, c, d, e, f, g) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(g) << 24) | (_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
@@ -318,16 +312,13 @@ static inline void _ulog_dispatch_float(uint16_t id, float a) {
       _ULOG_DISPATCH_GENERIC(d, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(e, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(f, ULOG_ID_CONTINUATION) \
-      _ULOG_DISPATCH_GENERIC(g, 0) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DISPATCH_GENERIC(g, ULOG_ID_CONTINUATION) \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 #define _ULOG_DISPATCH_8(level, fmt, a, b, c, d, e, f, g, h) \
    do { \
-      _Pragma("GCC diagnostic push") \
-      _Pragma("GCC diagnostic ignored \"-Wconversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wsign-conversion\"") \
-      _Pragma("GCC diagnostic ignored \"-Wfloat-conversion\"") \
+      _ULOG_DIAG_PUSH() \
       _ULOG_EMIT_RECORD(level, fmt, ((_ULOG_TC(h) << 28) | (_ULOG_TC(g) << 24) | (_ULOG_TC(f) << 20) | (_ULOG_TC(e) << 16) | (_ULOG_TC(d) << 12) | (_ULOG_TC(c) << 8) | (_ULOG_TC(b) << 4) | _ULOG_TC(a))); \
       _ULOG_DISPATCH_GENERIC(a, 0) \
       _ULOG_DISPATCH_GENERIC(b, ULOG_ID_CONTINUATION) \
@@ -336,8 +327,8 @@ static inline void _ulog_dispatch_float(uint16_t id, float a) {
       _ULOG_DISPATCH_GENERIC(e, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(f, ULOG_ID_CONTINUATION) \
       _ULOG_DISPATCH_GENERIC(g, ULOG_ID_CONTINUATION) \
-      _ULOG_DISPATCH_GENERIC(h, 0) \
-      _Pragma("GCC diagnostic pop") \
+      _ULOG_DISPATCH_GENERIC(h, ULOG_ID_CONTINUATION) \
+      _ULOG_DIAG_POP() \
    } while(0)
 
 // Support macros to expand ... into actual dispatcher based on argument count
