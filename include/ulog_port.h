@@ -26,7 +26,7 @@ void _ulog_init();
 #undef _ULOG_LOAD_ID
 
 #ifdef __AVR__
-   #define _ULOG_LOAD_ID "ldi %0, hi8(1b)"
+   #define _ULOG_LOAD_ID "ldi %A0, hi8(1b)\n\tldi %B0, lo8(1b)"
    #define _ULOG_EMIT_RECORD_PROLOGUE register uint16_t _ulog_index __asm__ ("r24")
 #elif defined(__x86_64__) || defined(__amd64__)
    // x86-64 optimization: Use RIP-relative addressing for direct pointer computation

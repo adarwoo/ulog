@@ -35,13 +35,13 @@
 // ----------------------------------------------------------------------
 // Private types
 // ----------------------------------------------------------------------
-typedef struct {
+typedef struct __attribute__((packed)) {
     // Length of the data in the buffer (including the id)
     uint8_t payload_len;
 
     union {
         struct {
-            // Id of the log message (16-bit, stored in native endianness)
+            // Id of the log message (16-bit, stored in native little-endian)
             uint16_t id;
             // Data to send over
             uint8_t data[MAX_PAYLOAD];
@@ -64,9 +64,14 @@ LogPacket logs_circular_buffer[ULOG_QUEUE_SIZE];
 
 // Scratch buffer for encoded output. Worse case
 // The payload(COBS adds +2 overhead worse case)
-// Pre-fill with the encoded application start frame (big-endian)
-static uint8_t tx_encoded[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2] =
-   {0x03, (uint8_t)(ULOG_ID_START >> 8), (uint8_t)(ULOG_ID_START & 0xFF), COBS_EOF};
+static union __attribute__((packed)) {
+   struct {
+      uint8_t len;
+      uint16_t id;
+      uint8_t eof;
+   };
+   uint8_t bytes[MAX_PAYLOAD + sizeof(ULOG_ID_TYPE) + 2];
+} tx_encoded = {{0x03, ULOG_ID_START, COBS_EOF}};
 
 // Flag to indicate a buffer overrun masked into the trait of the log
 // This is a simple way to indicate that some logs were lost
@@ -129,19 +134,19 @@ static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
         uint8_t input_byte = input[read_index];
 
         if (input_byte == COBS_EOF) {
-            tx_encoded[code_index] = code;
+            tx_encoded.bytes[code_index] = code;
             code_index = write_index++;
             code = 1;
         } else {
-            tx_encoded[write_index++] = input_byte;
+            tx_encoded.bytes[write_index++] = input_byte;
             ++code;
         }
 
         ++read_index;
     }
 
-    tx_encoded[code_index] = code;
-    tx_encoded[write_index++] = COBS_EOF; // end frame
+    tx_encoded.bytes[code_index] = code;
+    tx_encoded.bytes[write_index++] = COBS_EOF; // end frame
 
     return write_index;
 }
@@ -154,34 +159,32 @@ static uint8_t cobs_encode(const uint8_t* input, uint8_t length) {
  * This function should be called when the system is idle.
  */
 void _ulog_transmit() {
+   uint8_t encoded_len = 0;
+
    // Avoid race condition since an interrupt could be logging
+   // Keep critical section for the entire encode+send to protect tx_encoded buffer
    _ULOG_PORT_ENTER_CRITICAL_SECTION();
 
-   // Check the UART is ready and we have data to send
-   // No race expected: The flag could clear after we check it, but in that
-   // case, given the critical section here, the UART call this function again when ready
    if ( _ULOG_UART_TX_READY() ) {
+      // Check the UART is ready and we have data to send
       if (log_tail != log_head) {
-         // Data to send
+         // Data to send - encode while still in critical section
          LogPacket pkt = logs_circular_buffer[log_tail];
          log_tail = (uint8_t)((log_tail + 1) % ULOG_QUEUE_SIZE);
 
-         uint8_t encoded_len = cobs_encode(pkt.payload, pkt.payload_len);
-
-         _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
+         encoded_len = cobs_encode(pkt.payload, pkt.payload_len);
+         _ULOG_PORT_SEND_DATA(tx_encoded.bytes, encoded_len);
       } else if (buffer_overrun > 0) {
+         // Send overrun notification
          struct {
             uint16_t id;
             uint8_t count;
          } overrun_payload = {ULOG_ID_OVERRUN, 0};
 
-         uint8_t encoded_len = cobs_encode((const uint8_t*)&overrun_payload, sizeof(overrun_payload));
-
-         // Send an overrun notification packet
-         _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len);
-
-         // Clear the overrun flag
          buffer_overrun = 0;
+
+         encoded_len = cobs_encode((const uint8_t*)&overrun_payload, sizeof(overrun_payload));
+         _ULOG_PORT_SEND_DATA(tx_encoded.bytes, encoded_len);
       }
    }
 
@@ -193,7 +196,7 @@ void _ulog_transmit() {
  * Internal init function to be called by the porting layer
  */
 void _ulog_init() {
-   _ULOG_PORT_SEND_DATA(tx_encoded, 4); // Send the application start frame (3 bytes + EOF)
+   _ULOG_PORT_SEND_DATA(tx_encoded.bytes, 4); // Send the application start frame (3 bytes + EOF)
 }
 
 
@@ -209,6 +212,8 @@ void ulog_detail_enqueue(uint16_t id) {
       dst->id = id;
       dst->payload_len = 2+0;
    }
+
+   _ULOG_PORT_NOTIFY();
 }
 
 void ulog_detail_enqueue_1(uint16_t id, uint8_t v0) {
@@ -218,11 +223,9 @@ void ulog_detail_enqueue_1(uint16_t id, uint8_t v0) {
       dst->id = id;
       dst->payload_len = 2+1;
       dst->data[0] = v0;
-
-      // Notify that data is available so a transmission can be initiated
-      // This function must be callable from an interrupt context
-      _ULOG_PORT_NOTIFY();
    }
+
+   _ULOG_PORT_NOTIFY();
 }
 
 void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1) {
@@ -233,11 +236,9 @@ void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1) {
       dst->payload_len = 2+2;
       dst->data[0] = v0;
       dst->data[1] = v1;
-
-      // Notify that data is available so a transmission can be initiated
-      // This function must be callable from an interrupt context
-      _ULOG_PORT_NOTIFY();
    }
+
+   _ULOG_PORT_NOTIFY();
 }
 
 void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
@@ -249,11 +250,9 @@ void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2) {
       dst->data[0] = v0;
       dst->data[1] = v1;
       dst->data[2] = v2;
-
-      // Notify that data is available so a transmission can be initiated
-      // This function must be callable from an interrupt context
-      _ULOG_PORT_NOTIFY();
    }
+
+   _ULOG_PORT_NOTIFY();
 }
 
 void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3) {
@@ -266,11 +265,9 @@ void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint
       dst->data[1] = v1;
       dst->data[2] = v2;
       dst->data[3] = v3;
-
-      // Notify that data is available so a transmission can be initiated
-      // This function must be callable from an interrupt context
-      _ULOG_PORT_NOTIFY();
    }
+
+   _ULOG_PORT_NOTIFY();
 }
 
 void ulog_flush(void) {

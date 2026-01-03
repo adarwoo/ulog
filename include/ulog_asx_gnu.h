@@ -23,16 +23,16 @@ bool _ulog_asx_tx_ready();
 //
 
 #define _ULOG_PORT_ENTER_CRITICAL_SECTION() \
-    cli()
+   cli()
 
 #define _ULOG_PORT_EXIT_CRITICAL_SECTION() \
-    sei()
+   sei()
 
 #define _ULOG_PORT_NOTIFY() \
-    reactor_null_notify_from_isr(_ulog_asx_react_to_initiate_transmit);
+   reactor_null_notify_from_isr(_ulog_asx_react_to_initiate_transmit);
 
 #define _ULOG_PORT_SEND_DATA(tx_encoded, encoded_len) \
-    _ulog_asx_send_data(tx_encoded, encoded_len)
+   _ulog_asx_send_data(tx_encoded, encoded_len)
 
 #define _ULOG_UART_TX_READY() \
-    _ulog_asx_tx_ready()
+   _ulog_asx_tx_ready()
