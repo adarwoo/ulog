@@ -36,19 +36,19 @@
 // Private types
 // ----------------------------------------------------------------------
 typedef struct __attribute__((packed)) {
-    // Length of the data in the buffer (including the id)
-    uint8_t payload_len;
+   // Length of the data in the buffer (including the id)
+   uint8_t payload_len;
 
-    union {
-        struct {
-            // Id of the log message (16-bit, stored in native little-endian)
-            uint16_t id;
-            // Data to send over
-            uint8_t data[MAX_PAYLOAD];
-        };
+   union __attribute__((packed)) {
+      struct __attribute__((packed)) {
+         // Id of the log message (16-bit, stored in native little-endian)
+         uint16_t id;
+         // Data to send over
+         uint8_t data[MAX_PAYLOAD];
+      };
 
-        uint8_t payload[2 + MAX_PAYLOAD];
-    };
+      uint8_t payload[2 + MAX_PAYLOAD];
+   };
 } LogPacket;
 
 // ----------------------------------------------------------------------
@@ -179,7 +179,7 @@ void _ulog_transmit() {
          struct {
             uint16_t id;
             uint8_t count;
-         } overrun_payload = {ULOG_ID_OVERRUN, 0};
+         } overrun_payload = {ULOG_ID_OVERRUN, buffer_overrun};
 
          buffer_overrun = 0;
 
@@ -271,14 +271,15 @@ void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint
 }
 
 void ulog_flush(void) {
-   // Keep transmitting until the buffer is empty
-   _ULOG_PORT_ENTER_CRITICAL_SECTION();
-
-   while (log_tail != log_head) {
-      _ULOG_PORT_EXIT_CRITICAL_SECTION();
-      _ulog_transmit();
+   while (true) {
       _ULOG_PORT_ENTER_CRITICAL_SECTION();
-   }
+      bool empty = (log_head == log_tail);
+      _ULOG_PORT_EXIT_CRITICAL_SECTION();
 
-   _ULOG_PORT_EXIT_CRITICAL_SECTION();
+      if ( empty ) {
+         break;
+      }
+
+      _ulog_transmit();
+   }
 }

@@ -28,7 +28,7 @@ namespace {
    using uart = uart::Uart<
       ULOG_UART,
       uart::CompileTimeConfig<
-         115200,
+         1000000,
          uart::width::_8,
          uart::parity::none,
          uart::stop::_1
@@ -48,13 +48,17 @@ namespace {
       // Register a reactor for initiating transmissions
       _ulog_asx_react_to_initiate_transmit = asx::reactor::bind(_ulog_transmit, reactor_prio_low);
 
-      // Kickstart the first transmission if data is available
+      // When the UART completes a transmission,
+      // trigger the reactor to check if more data needs sending
       uart::react_on_send_complete(_ulog_asx_react_to_initiate_transmit);
+
+      // Initialize ULOG port and send the START frame
+      _ulog_init();
    }
 
-    extern "C" void _ulog_asx_send_data(const uint8_t *data, size_t len) {
-        uart::send(std::span<const uint8_t>(data, len));
-    }
+   extern "C" void _ulog_asx_send_data(const uint8_t *data, size_t len) {
+      uart::send(std::span<const uint8_t>(data, len));
+   }
 
    extern "C" bool _ulog_asx_tx_ready() {
       return uart::tx_ready();
