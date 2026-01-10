@@ -19,6 +19,12 @@
 #  define ULOG_UART 0
 #endif
 
+// Define the baud rate for ULOG - uLogger must be configured to match this rate
+// We use a high baud rate to minimize the time spent transmitting logs
+// The link length is usually very short (PCB traces + short cables) allowing
+//  for high baud rates with minimal errors.
+constexpr auto BAUD_RATE = 921600;
+
 reactor_handle_t _ulog_asx_react_to_initiate_transmit = REACTOR_NULL_HANDLE;
 
 namespace {
