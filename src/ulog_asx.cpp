@@ -34,7 +34,7 @@ namespace {
    using uart = uart::Uart<
       ULOG_UART,
       uart::CompileTimeConfig<
-         1000000,
+         BAUD_RATE,
          uart::width::_8,
          uart::parity::none,
          uart::stop::_1
