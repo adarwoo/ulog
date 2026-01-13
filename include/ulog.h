@@ -8,6 +8,8 @@
  * ELF sections (.logs) while emitting runtime log payloads via register-based
  * emission routines. Format strings and type signatures are preserved at
  * compile time and can be indexed offline using the binary metadata.
+ * The string format uses the fancy string format from Python:
+ * @ref https://docs.python.org/3/library/string.html#formatspec
  *
  * Features:
  * - Zero runtime format overhead (all data are sent as raw binary packets)
@@ -29,7 +31,7 @@
  * // 2 bytes, packed from two uint8_t values. Use Python f-string style {} for formatting
  * uint8_t x = 10, y = 20;
  * ULOG_WARN("Pos:", x, y); // No formatting required
- * ULOG_WARN("Pos: ({.2%},{})", x, y); // Formatting supported
+ * ULOG_WARN("Pos: ({.2},{})", x, y); // Formatting supported
  *
  * // 4 bytes, float packed as IEEE 754
  * float temperature = 36.7f;
