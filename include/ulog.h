@@ -44,30 +44,62 @@
  * @note This header requires C11 or later for _Generic support and C++17 or later for template features.
  * @note For zero-argument logging (e.g., ULOG_INFO("text")), use -std=gnu11 or compiler default, not -std=c11
  *       (requires ##__VA_ARGS__ GNU extension)
+ * Configuring ULOG can be done in many ways:
+ * 1. By adding a conf_ulog.h file. The file path must be visible at ulog compile time
+ * 2. By specifying a config header file (see ULOG_CONFIG_FILE macro)
+ * 3. By defining ULOG_LEVEL on the compile command line as a -D option
  *
  * @author software@arreckx.com
  */
-#include <stdint.h>
-#include "ulog_port.h"
 
-#ifdef __cplusplus
+// 
+// Include the project ulog config (unless passed on the command line)
+//
+
+#ifndef ULOG_LEVEL
+   // Convention-based fallback - __has_include is supported by clang and gcc
+#  if defined __has_include
+#     if __has_include("conf_ulog.h")
+#        include "conf_ulog.h"
+#     endif
+#  elif defined ULOG_CONFIG_FILE
+#    include ULOG_CONFIG_FILE
+#  endif
+#endif
+
+#if (defined(ULOG_IS_DISABLED) && ULOG_IS_DISABLED != 0)
+   // ULog is disabled - provide empty definitions
+   #define ULOG(level, fmt, ...) do {} while (0)
+   #define ULOG_ERROR(text, ...) do {} while (0)
+   #define ULOG_WARN(text, ...)  do {} while (0)
+   #define ULOG_MILE(text, ...)  do {} while (0)
+   #define ULOG_INFO(text, ...)  do {} while (0)
+   #define ULOG_TRACE(text, ...) do {} while (0)
+   #define ULOG_LOG0(text, ...)  do {} while (0)
+   #define ULOG_LOG1(text, ...)  do {} while (0)
+   #define ULOG_LOG2(text, ...)  do {} while (0)
+   #define ULOG_LOG3(text, ...)  do {} while (0)
+#else
+#  include <stdint.h>
+#  include "ulog_port.h"
+
+#  ifdef __cplusplus
 extern "C" {
-#endif
+#  endif
 
+   // ============================================================================
+   // Forwarding prototypes
+   // ============================================================================
+   void ulog_detail_enqueue(uint16_t id);
+   void ulog_detail_enqueue_1(uint16_t id, uint8_t v0);
+   void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1);
+   void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2);
+   void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3);
+   void ulog_flush(void);
 
-// ============================================================================
-// Forwarding prototypes
-// ============================================================================
-void ulog_detail_enqueue(uint16_t id);
-void ulog_detail_enqueue_1(uint16_t id, uint8_t v0);
-void ulog_detail_enqueue_2(uint16_t id, uint8_t v0, uint8_t v1);
-void ulog_detail_enqueue_3(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2);
-void ulog_detail_enqueue_4(uint16_t id, uint8_t v0, uint8_t v1, uint8_t v2, uint8_t v3);
-void ulog_flush(void);
-
-#ifdef __cplusplus
+#  ifdef __cplusplus
 }
-#endif
+#  endif
 
 // ============================================================================
 // MACRO Compatible levels
@@ -560,19 +592,6 @@ do {                                                                          \
 
 #endif // End of the C-only section
 
-// Include the project trace config (unless passed on the command line)
-
-#ifndef ULOG_LEVEL
-   // Convention-based fallback - __has_include is supported by clang and gcc
-#  if defined __has_include
-#     if __has_include("conf_ulog.h")
-#        include "conf_ulog.h"
-#     endif
-#  elif defined ULOG_CONFIG_FILE
-#    include ULOG_CONFIG_FILE
-#  endif
-#endif
-
 // Default log level if not defined yet
 #ifndef ULOG_LEVEL
 #  ifdef NDEBUG
@@ -635,3 +654,4 @@ do {                                                                          \
 #else
   #define ULOG_DEBUG3(text, ...)      do {} while (0)
 #endif
+#endif // ULOG_IS_DISABLED
