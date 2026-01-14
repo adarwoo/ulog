@@ -52,7 +52,7 @@
  * @author software@arreckx.com
  */
 
-// 
+//
 // Include the project ulog config (unless passed on the command line)
 //
 
@@ -67,18 +67,19 @@
 #  endif
 #endif
 
+#ifdef __cplusplus
+   static inline void _ulog_dummy_function() {}
+   #define _ULOG_DISABLED _ulog_dummy_function()
+#else
+   #define _ULOG_DISABLED do {} while (0)
+#endif
+
 #if (defined(ULOG_IS_DISABLED) && ULOG_IS_DISABLED != 0)
-   // ULog is disabled - provide empty definitions
-   #define ULOG(level, fmt, ...) do {} while (0)
-   #define ULOG_ERROR(text, ...) do {} while (0)
-   #define ULOG_WARN(text, ...)  do {} while (0)
-   #define ULOG_MILE(text, ...)  do {} while (0)
-   #define ULOG_INFO(text, ...)  do {} while (0)
-   #define ULOG_TRACE(text, ...) do {} while (0)
-   #define ULOG_LOG0(text, ...)  do {} while (0)
-   #define ULOG_LOG1(text, ...)  do {} while (0)
-   #define ULOG_LOG2(text, ...)  do {} while (0)
-   #define ULOG_LOG3(text, ...)  do {} while (0)
+// ULog is disabled - provide empty definitions
+#  undef ULOG_LEVEL
+#  define ULOG_LEVEL -1
+#  define ULOG(level, fmt, ...) _ULOG_DISABLED
+#  define ulog_flush()          _ULOG_DISABLED
 #else
 #  include <stdint.h>
 #  include "ulog_port.h"
@@ -592,6 +593,8 @@ do {                                                                          \
 
 #endif // End of the C-only section
 
+#endif // ULOG_IS_DISABLED
+
 // Default log level if not defined yet
 #ifndef ULOG_LEVEL
 #  ifdef NDEBUG
@@ -604,54 +607,53 @@ do {                                                                          \
 #if ULOG_LEVEL >= ULOG_LEVEL_ERROR
   #define ULOG_ERROR(text, ...)       ULOG(ULOG_LEVEL_ERROR, text, ##__VA_ARGS__)
 #else
-  #define ULOG_ERROR(text, ...)       do {} while (0)
+  #define ULOG_ERROR(text, ...)       _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_WARN
   #define ULOG_WARN(text, ...)       ULOG(ULOG_LEVEL_WARN, text, ##__VA_ARGS__)
 #else
-  #define ULOG_WARN(text, ...)       do {} while (0)
+  #define ULOG_WARN(text, ...)       _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_MILE
    #define ULOG_MILE(text, ...)       ULOG(ULOG_LEVEL_MILE, text, ##__VA_ARGS__)
 #else
-   #define ULOG_MILE(text, ...)       do {} while (0)
+   #define ULOG_MILE(text, ...)       _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_INFO
   #define ULOG_INFO(text, ...)       ULOG(ULOG_LEVEL_INFO, text, ##__VA_ARGS__)
 #else
-  #define ULOG_INFO(text, ...)       do {} while (0)
+  #define ULOG_INFO(text, ...)       _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_TRACE
   #define ULOG_TRACE(text, ...)       ULOG(ULOG_LEVEL_TRACE, text, ##__VA_ARGS__)
 #else
-  #define ULOG_TRACE(text, ...)       do {} while (0)
+  #define ULOG_TRACE(text, ...)       _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_DEBUG0
   #define ULOG_DEBUG0(text, ...)      ULOG(ULOG_LEVEL_DEBUG0, text, ##__VA_ARGS__)
 #else
-  #define ULOG_DEBUG0(text, ...)      do {} while (0)
+  #define ULOG_DEBUG0(text, ...)      _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_DEBUG1
   #define ULOG_DEBUG1(text, ...)      ULOG(ULOG_LEVEL_DEBUG1, text, ##__VA_ARGS__)
 #else
-  #define ULOG_DEBUG1(text, ...)      do {} while (0)
+  #define ULOG_DEBUG1(text, ...)      _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_DEBUG2
   #define ULOG_DEBUG2(text, ...)      ULOG(ULOG_LEVEL_DEBUG2, text, ##__VA_ARGS__)
 #else
-  #define ULOG_DEBUG2(text, ...)      do {} while (0)
+  #define ULOG_DEBUG2(text, ...)      _ULOG_DISABLED
 #endif
 
 #if ULOG_LEVEL >= ULOG_LEVEL_DEBUG3
   #define ULOG_DEBUG3(text, ...)      ULOG(ULOG_LEVEL_DEBUG3, text, ##__VA_ARGS__)
 #else
-  #define ULOG_DEBUG3(text, ...)      do {} while (0)
+  #define ULOG_DEBUG3(text, ...)      _ULOG_DISABLED
 #endif
-#endif // ULOG_IS_DISABLED
