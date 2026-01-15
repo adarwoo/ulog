@@ -44,9 +44,17 @@ void _ulog_init();
       return (uint16_t)((addr - base) >> 8);
    }
 #elif defined(__arm__) && !defined(__aarch64__)
-   // ARM32 optimization: Use PC-relative addressing for direct pointer computation
-   // Similar to x86-64 but uses ARM's PC-relative addressing
-   #define _ULOG_LOAD_ID "adr %0, 1b"
+   // ARM32: Use literal pool load (works on Cortex-M0+)
+   #define _ULOG_EMIT_RECORD_PROLOGUE uint32_t _ulog_index
+   #define _ULOG_LOAD_ID "ldr %0, =1b"
+   #define _ULOG_EMIT_RECORD_EPILOGUE uint16_t id = ulog_id_rel(_ulog_index)
+
+   // ARM uses subtraction-based ID computation
+   static inline uint16_t ulog_id_rel(uint32_t addr) {
+      extern const unsigned char __ulog_logs_start[];
+      uintptr_t base = (uintptr_t)__ulog_logs_start;
+      return (uint16_t)((addr - base) >> 8);
+   }
 #elif defined(__mips__)
    // MIPS optimization: Use PC-relative addressing via label reference
    #define _ULOG_LOAD_ID "la %0, 1b"
@@ -70,7 +78,13 @@ void _ulog_init();
 
 // Check for the framework/scheduler being used
 #if defined(USE_ASX) || defined(__ASX__)
-   #include "ulog_asx_gnu.h"
+#  if defined(__AVR__)
+#    include "ulog_avr_asx_gnu.h"
+#  elif defined(__arm__) || defined(__ARMEL__)
+#    include "ulog_arm_asx_gnu.h"
+#  else
+#    error "ULog: ASX framework is only supported on AVR and ARM targets."
+#  endif
 #elif defined(__linux__)
 #  include "ulog_linux_gnu.h"
 #elif defined(FREERTOS)
@@ -82,6 +96,15 @@ void _ulog_init();
 // ---------------------------------------------------------------------------
 // End of platform detection
 // ---------------------------------------------------------------------------
+
+// Define the correct assembler syntax for section type based on architecture
+#if defined(__arm__) || defined(__ARMEL__) || defined(__aarch64__)
+   // ARM assemblers use % prefix for section type
+   #define _ULOG_SECTION_TYPE "%%progbits"
+#else
+   // AVR, x86, and most other architectures use @ prefix
+   #define _ULOG_SECTION_TYPE "@progbits"
+#endif
 
 /**
  * Log record emission using direct register loading.
@@ -95,7 +118,7 @@ void _ulog_init();
 #define _ULOG_EMIT_RECORD(level, fmt, typecode)                       \
    _ULOG_EMIT_RECORD_PROLOGUE;                                        \
    __asm__ volatile(                                                  \
-      ".pushsection .logs,\"\",@progbits\n\t"                         \
+      ".pushsection .logs,\"\"," _ULOG_SECTION_TYPE "\n\t"            \
       ".balign 256\n\t"                                               \
       "1:\n\t"                                                        \
       ".long %c1\n\t"                                                 \
