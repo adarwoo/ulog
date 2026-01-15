@@ -4,14 +4,16 @@
  * Provides asynchronous logging over UART using the ASX framework.
  * @author software@arreckx.com
  */
-#include <string_view>
+#include "ulog_port.h"
 
-#include <interrupt.h>
+#if !defined(ULOG_IS_DISABLED) || (ULOG_IS_DISABLED == 0)
+#include <string_view>
+#include <cstring>
+
+#include <avr/interrupt.h>
 
 #include <asx/uart.hpp>
 #include <asx/reactor.hpp>
-
-#include "ulog_port.h"
 
 // Allow overriding the UART number used for ULOG
 // This should be defined in conf_ulog.h if needed
@@ -70,4 +72,4 @@ namespace {
       return uart::tx_ready();
    }
 }
-
+#endif // ULOG_IS_DISABLED

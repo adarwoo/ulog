@@ -5,6 +5,8 @@
  * @author software@arreckx.com
  */
 #include "ulog.h"
+
+#if !defined(ULOG_IS_DISABLED) || (ULOG_IS_DISABLED == 0)
 #include <stdio.h>
 //
 // Apply configuration defaults
@@ -283,3 +285,4 @@ void ulog_flush(void) {
       _ulog_transmit();
    }
 }
+#endif // ULOG_IS_DISABLED
